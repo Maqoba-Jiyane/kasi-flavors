@@ -54,6 +54,7 @@ export default async function StoreAnalyticsPage({
   const rangeParam = (range as RangeOption | undefined) ?? "30d";
   const rangeStart = getRangeStart(rangeParam, now);
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where: any = { storeId: store.id };
   if (rangeStart) {
     where.createdAt = { gte: rangeStart };

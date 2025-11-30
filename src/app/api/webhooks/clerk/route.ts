@@ -25,6 +25,7 @@ export async function POST(req: Request) {
 
   const wh = new Webhook(secret);
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let event: any;
   try {
     event = wh.verify(payload, {

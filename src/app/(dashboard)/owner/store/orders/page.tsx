@@ -84,6 +84,7 @@ export default async function OwnerOrdersPage({
   const rangeStart = getRangeStart(rangeParam, now);
 
   // Base where clause
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where: any = { storeId: store.id };
   
   if (rangeStart) {

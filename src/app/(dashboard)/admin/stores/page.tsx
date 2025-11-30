@@ -4,7 +4,7 @@ import { getCurrentUser, assertRole } from "@/lib/auth";
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import type { Order, Store, User, UserRole } from "@prisma/client";
+import type { Store, User } from "@prisma/client";
 
 type RangeOption = "7d" | "30d" | "all";
 
@@ -129,6 +129,7 @@ export default async function AdminStoresPage({
   });
 
   // Fetch orders once for this range
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const ordersWhere: any = {};
   if (rangeStart) {
     ordersWhere.createdAt = { gte: rangeStart };

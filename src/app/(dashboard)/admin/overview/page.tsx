@@ -1,7 +1,7 @@
 // app/(dashboard)/admin/overview/page.tsx
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser, assertRole } from "@/lib/auth";
-import type { Order, OrderItem, Store } from "@prisma/client";
+import type { Order, Store } from "@prisma/client";
 
 type RangeOption = "7d" | "30d" | "all";
 
@@ -39,6 +39,7 @@ export default async function AdminOverviewPage({
   const rangeParam = (searchParams?.range as RangeOption | undefined) ?? "30d";
   const rangeStart = getRangeStart(rangeParam, now);
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where: any = {};
   if (rangeStart) {
     where.createdAt = { gte: rangeStart };

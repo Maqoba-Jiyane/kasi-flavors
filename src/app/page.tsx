@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { StoreCard } from "@/components/StoreCard";
 import { getCurrentUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { SignedIn, SignedOut, SignIn, UserButton } from "@clerk/nextjs";
+import { SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 
