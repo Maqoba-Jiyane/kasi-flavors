@@ -1,0 +1,134 @@
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum UserRole {
+  CUSTOMER
+  STORE_OWNER
+  ADMIN
+}
+
+enum OrderStatus {
+  PENDING
+  ACCEPTED
+  IN_PREPARATION
+  READY_FOR_COLLECTION
+  OUT_FOR_DELIVERY
+  COMPLETED
+  CANCELLED
+}
+
+enum FulfilmentType {
+  COLLECTION
+  DELIVERY
+}
+
+enum PaymentMethod {
+  CASH_ON_DELIVERY
+}
+
+model User {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  clerkUserId String   @unique
+  role        UserRole
+  name        String
+  email       String   @unique
+  phone       String?
+
+  // A store owner owns at most one store (MVP)
+  store       Store?   @relation("StoreOwner")
+
+  orders      Order[]  @relation("CustomerOrders")
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Store {
+  id                 String     @id @default(auto()) @map("_id") @db.ObjectId
+  name               String
+  slug               String     @unique
+  description        String?
+  address            String
+  city               String
+  area               String
+  avgPrepTimeMinutes Int        @default(25)
+  isOpen             Boolean    @default(true)
+
+  // Owner lives here (FK on Store side)
+  owner   User   @relation("StoreOwner", fields: [ownerId], references: [id])
+  ownerId String @db.ObjectId @unique
+
+  products  Product[]
+  orders    Order[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Product {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  store       Store    @relation(fields: [storeId], references: [id])
+  storeId     String   @db.ObjectId
+
+  name        String
+  description String?
+  priceCents  Int
+  imageUrl    String?
+  isAvailable Boolean  @default(true)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  orderItems  OrderItem[]
+}
+
+model Order {
+  id               String        @id @default(auto()) @map("_id") @db.ObjectId
+  store            Store         @relation(fields: [storeId], references: [id])
+  storeId          String        @db.ObjectId
+
+  customer         User?         @relation("CustomerOrders", fields: [customerId], references: [id])
+  customerId       String?       @db.ObjectId
+
+  customerName     String
+  customerPhone    String?
+  customerEmail    String
+  fulfilmentType   FulfilmentType
+  paymentMethod    PaymentMethod @default(CASH_ON_DELIVERY)
+  status           OrderStatus   @default(PENDING)
+
+  totalCents       Int
+  deliveryAddress  String?
+  note             String?
+
+  pickupCode       String        @unique
+  trackingToken    String        @unique
+  
+  estimatedReadyAt DateTime?
+  completedAt      DateTime?
+
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  items            OrderItem[]
+}
+
+model OrderItem {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  order      Order    @relation(fields: [orderId], references: [id])
+  orderId    String   @db.ObjectId
+
+  product    Product  @relation(fields: [productId], references: [id])
+  productId  String   @db.ObjectId
+
+  name       String
+  quantity   Int
+  unitCents  Int
+  totalCents Int
+}
