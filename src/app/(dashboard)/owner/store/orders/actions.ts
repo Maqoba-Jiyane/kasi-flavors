@@ -34,7 +34,7 @@ export async function markOrderReady(
 
   await sendOrderReadyEmail({ to: order.customerEmail || "",orderId: order.id,
     // phone: order.customerPhone,
-    customerName: order.customerName,
+    customerName: order.customerName || 'Walk-in',
     storeName: user.store?.name ?? "Your Store",
     fulfilmentType: order.fulfilmentType,
     pickupCode: order.pickupCode,
@@ -112,7 +112,7 @@ export async function updateOrderStatus(formData: FormData) {
     try {
       await sendOrderReadyEmail({
         to: order.customerEmail!,
-        customerName: order.customerName,
+        customerName: order.customerName || 'Walk-in',
         storeName: order.store.name,
         orderId: order.id,
         pickupCode: order.pickupCode,

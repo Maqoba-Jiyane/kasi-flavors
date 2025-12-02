@@ -7,6 +7,11 @@ generator client {
   provider = "prisma-client-js"
 }
 
+enum OrderSource {
+  CUSTOMER
+  MANUAL
+}
+
 enum UserRole {
   CUSTOMER
   STORE_OWNER
@@ -69,6 +74,8 @@ model Store {
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+
+  @@index([isOpen])
 }
 
 model Product {
@@ -86,6 +93,9 @@ model Product {
   updatedAt   DateTime @updatedAt
 
   orderItems  OrderItem[]
+
+  @@index([storeId])
+  @@index([storeId, name])
 }
 
 model Order {
@@ -96,9 +106,9 @@ model Order {
   customer         User?         @relation("CustomerOrders", fields: [customerId], references: [id])
   customerId       String?       @db.ObjectId
 
-  customerName     String
+  customerName     String?
   customerPhone    String?
-  customerEmail    String
+  customerEmail    String?
   fulfilmentType   FulfilmentType
   paymentMethod    PaymentMethod @default(CASH_ON_DELIVERY)
   status           OrderStatus   @default(PENDING)
@@ -106,6 +116,10 @@ model Order {
   totalCents       Int
   deliveryAddress  String?
   note             String?
+
+  source           OrderSource   @default(CUSTOMER)
+  createdByOwnerId String?       @db.ObjectId  // owner who created order (if source = MANUAL)
+
 
   pickupCode       String        @unique
   trackingToken    String        @unique
@@ -117,6 +131,10 @@ model Order {
   updatedAt        DateTime      @updatedAt
 
   items            OrderItem[]
+
+  @@index([storeId])
+  @@index([status])
+  @@index([storeId, status])
 }
 
 model OrderItem {
@@ -131,4 +149,7 @@ model OrderItem {
   quantity   Int
   unitCents  Int
   totalCents Int
+
+  @@index([orderId])
+  @@index([productId])
 }

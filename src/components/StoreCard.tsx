@@ -1,3 +1,5 @@
+'use client'
+
 import Link from "next/link";
 
 export type Store = {
@@ -17,10 +19,19 @@ interface StoreCardProps {
 
 export function StoreCard({ store }: StoreCardProps) {
   return (
-    <Link
-      href={`/stores/${store.slug}`}
-      className="group flex flex-col rounded-xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-md dark:border-slate-800 dark:bg-slate-900"
-    >
+<Link
+  href={store.isOpen ? `/stores/${store.slug}` : "#"}
+  onClick={(e) => {
+    if (!store.isOpen) {
+      e.preventDefault();        // stop navigation
+      e.stopPropagation();       // prevent bubbling
+    }
+  }}
+  className={`group flex flex-col rounded-xl border border-slate-200 bg-white shadow-sm transition
+    ${store.isOpen ? "hover:-translate-y-1 hover:shadow-md" : "opacity-60 cursor-not-allowed"}
+    dark:border-slate-800 dark:bg-slate-900`}
+>
+
       {/* Top section */}
       <div className="flex-1 p-4">
         <div className="flex items-start justify-between gap-2">

@@ -10,15 +10,19 @@ import {
     clearCart,
   } from "./actions";
   import Link from "next/link";
+import { Trash2 } from "lucide-react";
   
   export default async function CartPage() {
     const cart = await readCartFromCookies();
     const { itemCount, subtotalCents } = calculateCartTotals(cart);
   
     const hasItems = cart.items.length > 0;
+
+    const itemsParam = encodeURIComponent(JSON.stringify(cart.items));
+    const route = `/checkout?storeId=${cart.storeId}&items=${itemsParam}`;
   
     return (
-      <div className="space-y-6">
+      <div className="space-y-6 min-h-screen px-4 py-6 sm:px-6 lg:px-8 dark:bg-slate-950">
         <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-50">
@@ -118,7 +122,7 @@ import {
                         type="submit"
                         className="text-[11px] font-medium text-slate-400 hover:text-red-500 dark:hover:text-red-400"
                       >
-                        Remove
+                        <Trash2 />
                       </button>
                     </form>
                   </div>
@@ -150,7 +154,7 @@ import {
               </p>
   
               <Link
-                href="/checkout"
+                href={`${route}`}
                 className="mt-4 inline-flex w-full items-center justify-center rounded-full bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700"
               >
                 Continue to checkout

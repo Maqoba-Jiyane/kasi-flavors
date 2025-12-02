@@ -21,12 +21,12 @@ function AddButtonInner() {
   );
 }
 
-export function AddToCartButton({ productId }: AddToCartButtonProps) {
-  return (
-    <form action={addToCart} className="mt-2">
-      <input type="hidden" name="productId" value={productId} />
-      <input type="hidden" name="quantity" value="1" />
-      <AddButtonInner />
-    </form>
-  );
-}
+// export function AddToCartButton({ productId }: AddToCartButtonProps) {
+//   return (
+//     <form action={addToCart} className="mt-2">
+//       <input type="hidden" name="productId" value={productId} />
+//       <input type="hidden" name="quantity" value="1" />
+//       <AddButtonInner />
+//     </form>
+//   );
+// }

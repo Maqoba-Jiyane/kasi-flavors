@@ -15,7 +15,7 @@ export function CartSummaryBar({
   totalCents,
   onCheckout,
 }: CartSummaryBarProps) {
-  if (itemCount === 0) return null;
+  // if (itemCount === 0) return null;
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-4 py-3 shadow-2xl shadow-slate-900/20 backdrop-blur sm:px-0 dark:border-slate-800 dark:bg-slate-900/95">
@@ -35,7 +35,7 @@ export function CartSummaryBar({
           onClick={onCheckout}
           className="inline-flex items-center justify-center rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-emerald-500/30 transition hover:bg-emerald-700"
         >
-          Checkout →
+          View Cart →
         </button>
       </div>
     </div>

@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { MenuItemCard, MenuItem } from "@/components/MenuItemCard";
-import { CartSummaryBar } from "@/components/CartSummaryBar";
+import { CartSummaryBar } from "@/components/CartSummaryBar"
 
 type CartItem = {
   productId: string;
@@ -21,6 +21,30 @@ export function StoreMenuClient({
 }: StoreMenuClientProps) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const router = useRouter();
+
+  useEffect(() => {
+    const readCookies = async()=>{
+      const res = await fetch('/api/customers/orders', {
+        method: "GET",
+      });
+      
+      if(res.ok){
+        const cartItemsArray: CartItem[] = []
+        const cart = await res.json()
+        console.log(cart.cart)
+        cart.cart.map((item: { productId: string; quantity: number; }) => {
+          const cartItem = {
+            productId: item.productId,
+            quantity: item.quantity
+          }
+          cartItemsArray.push(cartItem)
+        })
+  
+        setCart(cartItemsArray)
+      }
+    }
+    readCookies()
+  }, []);
 
   const handleAddToCart = (productId: string, quantity: number) => {
     setCart((prev) => {
@@ -56,7 +80,7 @@ export function StoreMenuClient({
     // MVP: pass cart via query string.
     // For large carts, you would store this server-side or in DB instead.
     const itemsParam = encodeURIComponent(JSON.stringify(cart));
-    router.push(`/checkout?storeSlug=${storeSlug}&items=${itemsParam}`);
+    router.push(`/cart?storeSlug=${storeSlug}&items=${itemsParam}`);
   };
 
   return (

@@ -38,7 +38,7 @@ export default async function HomePage() {
             Kasi Flavors
           </h1>
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-            Order from your favourite kasi spots – kotsa, kota, bunny chow, all
+            Order from your favourite kasi spots – kota, bunny chow, all
             in one place.
           </p>
           </div>

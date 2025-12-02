@@ -4,6 +4,8 @@ import { OwnerOrdersTable } from "@/components/dashboard/OwnerOrdersTable";
 import Link from "next/link";
 import type { Order, OrderItem, Prisma } from "@prisma/client";
 import { LiveOrdersWatcher } from "@/components/dashboard/LiveOrdersWatcher";
+import { AddManualOrderClient } from "@/components/dashboard/AddManualOrderClient";
+import ToggleStoreButton from "@/components/ToggleStoreButton";
 
 type SortOption = "time_desc" | "time_asc" | "status";
 type RangeOption = "7d" | "30d" | "all";
@@ -86,7 +88,7 @@ export default async function OwnerOrdersPage({
   // Base where clause
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where: any = { storeId: store.id };
-  
+
   if (rangeStart) {
     where.createdAt = { gte: rangeStart };
   }
@@ -103,6 +105,12 @@ export default async function OwnerOrdersPage({
       items: true,
     },
     take: 200,
+  });
+
+  const products = await prisma.product.findMany({
+    where: { storeId: store.id, isAvailable: true },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, name: true, priceCents: true },
   });
 
   let sorted: (Order & { items: OrderItem[] })[];
@@ -156,17 +164,20 @@ export default async function OwnerOrdersPage({
       <div className="mx-auto max-w-5xl space-y-4">
         {/* Header */}
         <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-50">
-              Orders
-            </h1>
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-300">
-              {rangeLabel} for{" "}
-              <span className="font-medium text-slate-800 dark:text-slate-100">
-                {store.name}
-              </span>
-              .
-            </p>
+          <div className="flex justify-between lg:flex-col lg:gap-4">
+            <div>
+              <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-50">
+                Orders
+              </h1>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-300">
+                {rangeLabel} for{" "}
+                <span className="font-medium text-slate-800 dark:text-slate-100">
+                  {store.name}
+                </span>
+                .
+              </p>
+            </div>
+            <ToggleStoreButton initialState={store.isOpen} storeId={store.id} />
           </div>
 
           {/* Controls: Sort + Range + View */}
@@ -241,9 +252,9 @@ export default async function OwnerOrdersPage({
             </div>
           </div>
         </header>
-
+        <AddManualOrderClient products={products} />
         {/* 🔴 Live watcher: polls + refreshes + plays sound when new order arrives */}
-      <LiveOrdersWatcher initialLatestOrderId={latestOrderId} />
+        <LiveOrdersWatcher initialLatestOrderId={latestOrderId} />
 
         <OwnerOrdersTable orders={mapped} />
       </div>

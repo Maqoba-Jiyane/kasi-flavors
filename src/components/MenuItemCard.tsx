@@ -1,5 +1,6 @@
 "use client";
 
+import { addToCart } from "@/app/cart/actions";
 import { useState } from "react";
 
 export type MenuItem = {
@@ -23,8 +24,9 @@ function formatPrice(priceCents: number) {
 export function MenuItemCard({ item, onAdd }: MenuItemCardProps) {
   const [quantity, setQuantity] = useState<number>(1);
 
-  const handleAdd = () => {
+  const handleAdd = async() => {
     if (!item.isAvailable) return;
+    await addToCart(item.id, quantity)
     onAdd(item.id, quantity);
   };
 

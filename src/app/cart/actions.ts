@@ -10,14 +10,15 @@ import {
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+interface CartDataProps{
+  productId: string,
+  quantity: number
+}
+
 // ADD TO CART
-export async function addToCart(formData: FormData) {
-  const productId = formData.get("productId") as string | null;
-  const quantityStr = (formData.get("quantity") as string | "1").trim();
+export async function addToCart(productId: string, quantity: number) {
 
   if (!productId) return;
-
-  const quantity = Math.max(1, Number(quantityStr) || 1);
 
   // Look up product to get price + name + storeId
   const product = await prisma.product.findUnique({

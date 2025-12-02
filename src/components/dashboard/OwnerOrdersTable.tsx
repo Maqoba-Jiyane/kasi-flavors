@@ -19,7 +19,7 @@ type OwnerOrderRow = {
   id: string;
   shortId: string;
   createdAt: Date;
-  customerName: string;
+  customerName: string | null;
   totalCents: number;
   status: OrderStatus;
   fulfilmentType: "COLLECTION" | "DELIVERY";
