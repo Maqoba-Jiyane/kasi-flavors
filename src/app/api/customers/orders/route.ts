@@ -47,9 +47,6 @@ export async function POST(req: Request) {
       note,
     });
 
-
-    const trackingToken = randomUUID();
-
     // send confirmation email (best-effort)
     await sendOrderConfirmationEmail({
       to: email,
@@ -58,7 +55,7 @@ export async function POST(req: Request) {
       orderId: order.id.slice(-6),
       pickupCode: order.pickupCode,
       fulfilmentType: order.fulfilmentType,
-      totalCents: order.totalCents,items: order.items, trackingToken
+      totalCents: order.totalCents,items: order.items, trackingToken: order.trackingToken
     });
 
     // Clear cart cookie by setting it to empty and maxAge 0

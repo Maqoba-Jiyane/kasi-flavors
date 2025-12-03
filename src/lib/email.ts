@@ -128,7 +128,7 @@ export async function sendOrderConfirmationEmail(args: SendOrderEmailArgs) {
     )
     .join("");
 
-  const trackingLink = `https://www.kasiflavors.co.za/track/${trackingToken}`;
+  const trackingLink = `http://localhost:3000/track/${trackingToken}`;
 
   const fulfilmentText =
     fulfilmentType === "COLLECTION"

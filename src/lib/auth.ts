@@ -19,6 +19,8 @@ export async function getCurrentUser(): Promise<UserWithStore | null> {
   const { userId } = await auth();
   if (!userId) return null;
 
+  console.log(userId)
+
   // Try to find existing user including store relation
   const existing = await prisma.user.findUnique({
     where: { clerkUserId: userId },

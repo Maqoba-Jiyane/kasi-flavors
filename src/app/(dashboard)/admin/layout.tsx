@@ -2,6 +2,7 @@
 import { ReactNode } from "react";
 import Link from "next/link";
 import { getCurrentUser, assertRole } from "@/lib/auth";
+import AdminNavbar from "@/components/nav/AdminNavbar";
 
 export default async function AdminLayout({
   children,
@@ -25,8 +26,9 @@ export default async function AdminLayout({
           </div>
 
           <nav className="flex items-center gap-3 text-xs font-medium text-slate-600 dark:text-slate-300">
-            <AdminNavLink href="/admin/overview">Overview</AdminNavLink>
-            <AdminNavLink href="/admin/stores">Stores</AdminNavLink>
+            {/* <AdminNavLink href="/admin/overview">Overview</AdminNavLink>
+            <AdminNavLink href="/admin/stores">Stores</AdminNavLink> */}
+            <AdminNavbar/>
             {/* later: /admin/orders, /admin/users */}
           </nav>
         </div>
