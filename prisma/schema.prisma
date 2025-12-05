@@ -63,6 +63,7 @@ model Store {
   city               String
   area               String
   avgPrepTimeMinutes Int        @default(25)
+  creditCents        Int      @default(100000)
   isOpen             Boolean    @default(true)
 
   // Owner lives here (FK on Store side)
@@ -71,6 +72,7 @@ model Store {
 
   products  Product[]
   orders    Order[]
+  LedgerEntry LedgerEntry[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -114,6 +116,8 @@ model Order {
   status           OrderStatus   @default(PENDING)
 
   totalCents       Int
+  platformFeeCents Int?            // amount platform charges (10% of underlying store amount)
+  platformFeePaid  Boolean @default(false) // becomes true when we deduct from store credit
   deliveryAddress  String?
   note             String?
 
@@ -152,4 +156,37 @@ model OrderItem {
 
   @@index([orderId])
   @@index([productId])
+}
+
+enum LedgerType {
+  FEE_RESERVE       // reserved when order created (not yet debited)
+  FEE_DEBIT         // actual debit to store balance when fee is captured
+  TOPUP             // store top up (owner payment)
+  REFUND            // refund / reversal
+  PAYOUT            // payout from platform to store (if you ever implement payouts)
+  ADJUSTMENT        // manual admin adjustment
+}
+
+enum LedgerStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+model LedgerEntry {
+  id           String     @id @default(auto()) @map("_id") @db.ObjectId
+  store        Store      @relation(fields: [storeId], references: [id])
+  storeId      String     @db.ObjectId
+  type         LedgerType
+  status       LedgerStatus @default(PENDING)
+  orderId      String?    @db.ObjectId   // optional: which order created this
+  amountCents  Int        // positive values: interpretation per type (FEE_DEBIT reduces balance)
+  balanceCents Int?       // snapshot of store.creditCents after this entry (if known)
+  note         String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @default(now())
+
+  @@index([storeId])
+  @@index([orderId])
+  @@index([type])
 }

@@ -49,7 +49,7 @@ async function createProduct(formData: FormData) {
     throw new Error("Missing required fields");
   }
 
-  const price = Number(priceStr);
+  const price = Number(priceStr) * 1.1;
   if (Number.isNaN(price) || price <= 0) {
     throw new Error("Invalid price");
   }

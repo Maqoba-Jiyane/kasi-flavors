@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/prisma";
-import { placeOrderAction } from "./actions";
 import { CheckoutForm } from "@/components/CheckoutForm";
 import { getCurrentUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
@@ -20,7 +19,7 @@ export default async function CheckoutPage({
   const user = await getCurrentUser();
 
   if (!user) {
-    redirect('/sign-in')
+    redirect('/sign-in?redirectUrl=/cart')
   }
 
   console.log("storeId: ", storeId)

@@ -18,8 +18,9 @@ export async function createOrderFromPayload(args: {
   email: string;
   fulfilmentType: "COLLECTION" | "DELIVERY";
   note?: string | null;
+  customerId?: string | null;
 }) {
-  const { storeId, items, fullName, phone, email, fulfilmentType, note } =
+  const { storeId, items, fullName, phone, email, fulfilmentType, note,  } =
     args;
 
   // Basic validation
@@ -76,6 +77,10 @@ export async function createOrderFromPayload(args: {
   );
   const trackingToken = randomUUID();
 
+  const customer = await prisma.user.findUnique({
+    where: {email}
+  })
+
   // Create order + items in a transaction
   const created = await prisma.order.create({
     data: {
@@ -88,7 +93,7 @@ export async function createOrderFromPayload(args: {
       totalCents,
       deliveryAddress: fulfilmentType === "DELIVERY" ? "" : null,
       note: note ?? null,
-      pickupCode,
+      pickupCode,customer: {connect: {id: customer?.id}},
       trackingToken,
       estimatedReadyAt,
       items: {

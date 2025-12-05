@@ -5,7 +5,6 @@ import Link from "next/link";
 import type { Order, OrderItem, Prisma } from "@prisma/client";
 import { LiveOrdersWatcher } from "@/components/dashboard/LiveOrdersWatcher";
 import { AddManualOrderClient } from "@/components/dashboard/AddManualOrderClient";
-import ToggleStoreButton from "@/components/ToggleStoreButton";
 
 type SortOption = "time_desc" | "time_asc" | "status";
 type RangeOption = "7d" | "30d" | "all";
@@ -177,7 +176,7 @@ export default async function OwnerOrdersPage({
                 .
               </p>
             </div>
-            <ToggleStoreButton initialState={store.isOpen} storeId={store.id} />
+            {/* <ToggleStoreButton initialState={store.isOpen} storeId={store.id} /> */}
           </div>
 
           {/* Controls: Sort + Range + View */}
