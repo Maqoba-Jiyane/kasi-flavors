@@ -1,5 +1,13 @@
 "use client";
 
+import {
+  SignedIn,
+  SignedOut,
+  SignInButton,
+  SignOutButton,
+  SignUpButton,
+} from "@clerk/nextjs";
+import { LogIn, User } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
@@ -17,6 +25,10 @@ export default function CustomerNavbar({
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+
+  if (pathname.startsWith("/owner") || pathname.startsWith("/admin")) {
+    return;
+  }
 
   return (
     <nav className="bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 sticky">
@@ -61,6 +73,33 @@ export default function CustomerNavbar({
               >
                 My orders
               </Link>
+
+              <div className="mt-2 px-3">
+                <SignedIn>
+                  <SignOutButton>
+                    <div className="flex justify-center w-full rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700">
+                      {/* <LogOut className="h-4 w-4" /> */}
+                      Sign Out
+                    </div>
+                  </SignOutButton>
+                </SignedIn>
+
+                <SignedOut>
+                  <SignInButton>
+                    <div className="flex cursor-pointer items-center gap-2">
+                      <LogIn className="h-4 w-4" />
+                      <span>Sign In</span>
+                    </div>
+                  </SignInButton>
+
+                  <SignUpButton>
+                    <div className="flex cursor-pointer items-center gap-2">
+                      <User className="h-4 w-4" />
+                      <span>Sign Up</span>
+                    </div>
+                  </SignUpButton>
+                </SignedOut>
+              </div>
             </div>
           </div>
 
@@ -90,7 +129,7 @@ export default function CustomerNavbar({
               )}
             </Link>
 
-            <div className="hidden sm:flex sm:items-center sm:gap-3">
+            {/* <div className="hidden sm:flex sm:items-center sm:gap-3">
               {userName ? (
                 <>
                   <span className="text-sm font-medium text-slate-900 dark:text-slate-50">
@@ -111,7 +150,7 @@ export default function CustomerNavbar({
                   Sign in
                 </button>
               )}
-            </div>
+            </div> */}
 
             <button
               onClick={() => setOpen((v) => !v)}
@@ -176,6 +215,33 @@ export default function CustomerNavbar({
                   Cart ({cartCount})
                 </Link>
               </div> */}
+
+              <div className="mt-2 px-3 w-full flex flex-col justify-center items-center">
+                <SignedIn>
+                  <SignOutButton>
+                    <div className="flex justify-center w-full rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700">
+                      {/* <LogOut className="h-4 w-4" /> */}
+                      Sign Out
+                    </div>
+                  </SignOutButton>
+                </SignedIn>
+
+                <SignedOut>
+                  <SignInButton>
+                    <div className="flex cursor-pointer items-center gap-2">
+                      <LogIn className="h-4 w-4" />
+                      <span>Sign In</span>
+                    </div>
+                  </SignInButton>
+
+                  <SignUpButton>
+                    <div className="flex cursor-pointer items-center gap-2">
+                      <User className="h-4 w-4" />
+                      <span>Sign Up</span>
+                    </div>
+                  </SignUpButton>
+                </SignedOut>
+              </div>
             </div>
           </div>
         )}

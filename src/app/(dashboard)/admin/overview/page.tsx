@@ -6,7 +6,7 @@ import type { Order, Store } from "@prisma/client";
 type RangeOption = "7d" | "30d" | "all";
 
 interface AdminOverviewPageProps {
-  searchParams?: { range?: string };
+  searchParams?: Promise<{ range?: string }>;
 }
 
 export function formatPrice(cents: number) {
@@ -36,7 +36,8 @@ export default async function AdminOverviewPage({
   assertRole(user, ["ADMIN"]);
 
   const now = new Date();
-  const rangeParam = (searchParams?.range as RangeOption | undefined) ?? "30d";
+  const range = await searchParams
+  const rangeParam = (range?.range as RangeOption | undefined) ?? "30d";
   const rangeStart = getRangeStart(rangeParam, now);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

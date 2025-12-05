@@ -42,26 +42,6 @@ export default async function HomePage() {
             in one place.
           </p>
           </div>
-
-          <div className="flex flex-col items-end gap-3">
-            <SignedOut>
-              <Button asChild size="default" variant="default">
-                <Link href="/sign-in">Sign In</Link>
-              </Button>
-            </SignedOut>
-            <SignedIn>
-              <UserButton
-                appearance={{
-                  elements: {
-                    avatarBox: {
-                      width: 35,
-                      height: 35,
-                    },
-                  },
-                }}
-              />
-            </SignedIn>
-          </div>
         </header>
 
         <section>

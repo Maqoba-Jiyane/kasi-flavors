@@ -5,6 +5,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import CustomerNavbar from "@/components/nav/CustomerNavbar";
 import { readCartFromCookies } from "@/lib/cart";
 import { getCurrentUser } from "@/lib/auth";
+import AdminNavbar from "@/components/nav/AdminNavbar";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -26,19 +27,25 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const cart = await readCartFromCookies()
-  const user = await getCurrentUser()
+  const cart = await readCartFromCookies();
+  const user = await getCurrentUser();
   return (
     <ClerkProvider>
-    <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        <CustomerNavbar cartCount={cart.items.length} userName={user?.name}/>
-        <main>{children}</main>
-      </body>
-    </html>
-    
+      <html lang="en">
+        <body
+          className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        >
+          {user?.role === "ADMIN" ? (
+            <AdminNavbar />
+          ) : (
+            <CustomerNavbar
+              cartCount={cart.items.length}
+              userName={user?.name}
+            />
+          )}
+          <main>{children}</main>
+        </body>
+      </html>
     </ClerkProvider>
   );
 }
