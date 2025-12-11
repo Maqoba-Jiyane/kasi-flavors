@@ -35,7 +35,7 @@ export async function queueEmailJob(opts: {
 
   // 2) Push job to QStash with just emailId
   await qstash.publishJSON({
-    url: `${process.env.APP_BASE_URL}/api/qstash/email-worker`,
+    url: `${process.env.BASE_URL}/api/qstash/email-worker`,
     body: {
       emailId: email.id,
     },

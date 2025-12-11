@@ -40,7 +40,7 @@ export async function createTopupCheckoutSession(amountCents: number) {
 
   const baseUrl = process.env.BASE_URL;
   if (!baseUrl) {
-    throw new Error("APP_BASE_URL is not configured.");
+    throw new Error("BASE_URL is not configured.");
   }
 
   // 1) Create ledger entry for this topup so we can reconcile via webhook

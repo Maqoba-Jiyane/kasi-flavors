@@ -122,7 +122,7 @@ export function buildOrderConfirmationEmail(
     .join("");
 
   const baseUrl =
-    process.env.APP_BASE_URL ?? process.env.BASE_URL ?? "http://localhost:3000";
+    process.env.BASE_URL ?? process.env.BASE_URL ?? "http://localhost:3000";
   const trackingLink = `${baseUrl.replace(/\/+$/, "")}/track/${trackingToken}`;
 
   const fulfilmentText =
