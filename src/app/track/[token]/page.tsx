@@ -3,6 +3,51 @@ import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import { StatusBadge } from "@/components/dashboard/StatusBadge";
 import { AutoRefresh } from "./AutoRefresh";
+import type { Metadata } from "next";
+
+type TrackPageRouteParams = {
+  token: string;
+};
+
+export async function generateMetadata(
+  { params }: { params: Promise<TrackPageRouteParams> }
+): Promise<Metadata> {
+  const { token } = await params;
+
+  const title = "Track your order";
+  const urlPath = `/track/${token}`;
+
+  return {
+    title, // becomes "Track your order | Kasi Flavors" via root template
+    description:
+      "Track the status, codes, and details for your Kasi Flavors order using this secure tracking link.",
+    alternates: {
+      canonical: urlPath,
+    },
+    openGraph: {
+      type: "website",
+      title: `${title} | Kasi Flavors`,
+      description:
+        "Check the latest status and details for your Kasi Flavors order.",
+      url: urlPath,
+    },
+    twitter: {
+      card: "summary",
+      title: `${title} | Kasi Flavors`,
+      description:
+        "Use this secure link to view the current status of your Kasi Flavors order.",
+    },
+    robots: {
+      index: false,
+      follow: false,
+      googleBot: {
+        index: false,
+        follow: false,
+        noimageindex: true,
+      },
+    },
+  };
+}
 
 type TrackPageProps = {
   params: Promise<{ token: string }>;
@@ -62,8 +107,6 @@ function getStatusMessage(args: {
 
 export default async function TrackOrderPage({ params }: TrackPageProps) {
   const {token} = await params;
-
-  console.log('track token: ', token)
 
   const order = await prisma.order.findUnique({
     where: { trackingToken: token },

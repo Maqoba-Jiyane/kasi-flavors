@@ -1,17 +1,61 @@
 import { prisma } from "@/lib/prisma";
 import { StoreCard } from "@/components/StoreCard";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUserMinimal } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
-import { Button } from "@/components/ui/button";
-import Link from "next/link";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Order kasi food online", // becomes "Order kasi food online | Kasi Flavors" via root template
+  description:
+    "Discover local kasi spots near you. Order kota, bunny chow, shisanyama and more for collection or delivery from your favourite township kitchens.",
+  alternates: {
+    canonical: "/", // home canonical
+  },
+  openGraph: {
+    type: "website",
+    title: "Order kasi food online | Kasi Flavors",
+    description:
+      "Browse kasi restaurants by area and city. Order kota, bunny chow, shisanyama and more for collection or delivery in your neighbourhood.",
+    url: "/",
+    images: [
+      {
+        url: "/og-image-home.png", // optional: use a home-specific hero, else fallback to the global /og-image.png
+        width: 1200,
+        height: 630,
+        alt: "Kasi Flavors home – browse kasi spots and order online",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Order kasi food online | Kasi Flavors",
+    description:
+      "Find nearby kasi spots and order kota, bunny chow, shisanyama and more for quick collection or delivery.",
+    images: ["/og-image-home.png"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
+};
 
 export default async function HomePage() {
+
   const stores = await prisma.store.findMany({
     orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      area: true,
+      city: true,
+      description: true,
+      avgPrepTimeMinutes: true,
+      isOpen: true
+    }
   });
 
-  const user = await getCurrentUser();
+  const user = await getCurrentUserMinimal();
 
   // If store owner, don't allow them to see the customer homepage.
   if (user?.role === "STORE_OWNER") {

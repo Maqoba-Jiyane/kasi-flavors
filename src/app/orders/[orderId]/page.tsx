@@ -1,5 +1,53 @@
 // app/orders/[orderId]/page.tsx
 import { prisma } from "@/lib/prisma";
+import { getCurrentUser } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import type { Metadata } from "next";
+
+type OrderPageRouteParams = {
+  orderId: string;
+};
+
+export async function generateMetadata(
+  { params }: { params: Promise<OrderPageRouteParams> }
+): Promise<Metadata> {
+  const { orderId } = await params;
+  const shortId = orderId.slice(-6);
+
+  const title = `Order #${shortId}`;
+  const urlPath = `/orders/${orderId}`;
+
+  return {
+    title, // becomes "Order #XXXXXX | Kasi Flavors" via root template
+    description:
+      "View the status, pickup or delivery code, and details for this Kasi Flavors order.",
+    alternates: {
+      canonical: urlPath,
+    },
+    openGraph: {
+      type: "website",
+      title: `${title} | Kasi Flavors`,
+      description:
+        "Track the status and view details for your Kasi Flavors order.",
+      url: urlPath,
+    },
+    twitter: {
+      card: "summary",
+      title: `${title} | Kasi Flavors`,
+      description:
+        "Track the status and see details for your Kasi Flavors order.",
+    },
+    robots: {
+      index: false,
+      follow: false,
+      googleBot: {
+        index: false,
+        follow: false,
+        noimageindex: true,
+      },
+    },
+  };
+}
 
 type OrderStatus =
   | "PENDING"
@@ -67,9 +115,34 @@ function minutesDiff(from: Date, to: Date) {
   return Math.round((to.getTime() - from.getTime()) / 60000);
 }
 
+// Reusable "order not found" UI so we can use it both for real 404 and unauthorized access
+function OrderNotFound() {
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 dark:bg-slate-950">
+      <div className="max-w-md rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-50">
+          Order not found
+        </h1>
+        <p className="mt-2 text-sm text-slate-500 dark:text-slate-300">
+          We couldn&apos;t find that order. Please check your link or contact
+          the store.
+        </p>
+      </div>
+    </main>
+  );
+}
+
 export default async function OrderPage({ params }: OrderPageProps) {
   const { orderId } = await params;
 
+  // 1) Require authentication
+  const user = await getCurrentUser();
+  if (!user) {
+    // Redirect to sign-in and come back here afterwards
+    redirect(`/sign-in?redirectUrl=/orders/${orderId}`);
+  }
+
+  // 2) Load order with customer info + store + items
   const order = await prisma.order.findUnique({
     where: { id: orderId },
     include: {
@@ -78,22 +151,26 @@ export default async function OrderPage({ params }: OrderPageProps) {
     },
   });
 
+  // If no order at all -> normal "not found"
   if (!order) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 dark:bg-slate-950">
-        <div className="max-w-md rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-50">
-            Order not found
-          </h1>
-          <p className="mt-2 text-sm text-slate-500 dark:text-slate-300">
-            We couldn&apos;t find that order. Please check your link or contact
-            the store.
-          </p>
-        </div>
-      </main>
-    );
+    return <OrderNotFound />;
   }
 
+  // 3) Check ownership:
+  // Prefer customerId, fall back to customerEmail match (case-insensitive)
+  const ownsById = !!order.customerId && order.customerId === user.id;
+
+  const ownsByEmail =
+    !!order.customerEmail &&
+    !!user.email &&
+    order.customerEmail.toLowerCase() === user.email.toLowerCase();
+
+  if (!ownsById && !ownsByEmail) {
+    // Do NOT reveal that the order exists; just show "not found"
+    return <OrderNotFound />;
+  }
+
+  // 4) Safe to render full order details for this user
   const shortId = order.id.slice(-6);
   const store = order.store;
   const now = new Date();
@@ -106,6 +183,32 @@ export default async function OrderPage({ params }: OrderPageProps) {
 
   const minutesRemaining =
     eta && order.status !== "COMPLETED" ? minutesDiff(now, eta) : null;
+
+  // Compute queue position for this order
+  const isInQueue =
+    order.status !== "COMPLETED" && order.status !== "CANCELLED";
+
+  let queuePosition: number | null = null;
+
+  if (isInQueue) {
+    const ACTIVE_STATUSES: OrderStatus[] = [
+      "PENDING",
+      "ACCEPTED",
+      "IN_PREPARATION",
+      "READY_FOR_COLLECTION",
+      "OUT_FOR_DELIVERY",
+    ];
+
+    const ordersAheadCount = await prisma.order.count({
+      where: {
+        storeId: order.storeId,
+        status: { in: ACTIVE_STATUSES },
+        createdAt: { lt: order.createdAt },
+      },
+    });
+
+    queuePosition = ordersAheadCount + 1;
+  }
 
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-6 dark:bg-slate-950">
@@ -162,23 +265,38 @@ export default async function OrderPage({ params }: OrderPageProps) {
               )}
             </div>
 
-            <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs dark:bg-slate-950/50">
-              <p className="font-medium text-slate-700 dark:text-slate-100">
-                {order.fulfilmentType === "COLLECTION"
-                  ? "Collection order"
-                  : "Delivery order"}
-              </p>
-              {order.fulfilmentType === "COLLECTION" ? (
-                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-300">
-                  You&apos;ll collect your food at the store. When the status
-                  changes to <strong>Ready for collection</strong>, you&apos;ll
-                  use your pickup code.
+            <div className="space-y-2 rounded-lg bg-slate-50 px-3 py-2 text-xs dark:bg-slate-950/50">
+              <div>
+                <p className="font-medium text-slate-700 dark:text-slate-100">
+                  {order.fulfilmentType === "COLLECTION"
+                    ? "Collection order"
+                    : "Delivery order"}
                 </p>
-              ) : (
-                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-300">
-                  A driver will deliver your order. When they arrive, they will
-                  ask for your delivery code.
-                </p>
+                {order.fulfilmentType === "COLLECTION" ? (
+                  <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-300">
+                    You&apos;ll collect your food at the store. When the status
+                    changes to <strong>Ready for collection</strong>,
+                    you&apos;ll use your pickup code.
+                  </p>
+                ) : (
+                  <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-300">
+                    A driver will deliver your order. When they arrive, they
+                    will ask for your delivery code.
+                  </p>
+                )}
+              </div>
+
+              {isInQueue && queuePosition !== null && (
+                <div className="rounded-md bg-slate-900/5 px-2 py-1.5 text-[11px] text-slate-700 dark:bg-slate-100/5 dark:text-slate-200">
+                  <p className="font-medium">
+                    You&apos;re{" "}
+                    <span className="font-semibold">#{queuePosition}</span> in
+                    the queue at {store.name}.
+                  </p>
+                  <p className="mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">
+                    This position is based on other active orders ahead of you.
+                  </p>
+                </div>
               )}
             </div>
           </div>

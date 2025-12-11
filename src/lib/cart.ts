@@ -1,7 +1,6 @@
 // lib/cart.ts
-import { cookies } from "next/headers";
-
-export const CART_COOKIE = "kasi_cart";
+import { prisma } from "@/lib/prisma";
+import { MAX_QTY_PER_ITEM, MIN_QTY_PER_ITEM } from "./constants";
 
 export type CartItem = {
   productId: string;
@@ -16,42 +15,117 @@ export type Cart = {
   items: CartItem[];
 };
 
+const MAX_ITEMS_PER_CART = 5; // keep same behaviour as old cookie logic
+
 export function getEmptyCart(): Cart {
   return { storeId: null, items: [] };
 }
 
-export async function readCartFromCookies(): Promise<Cart> {
-  const cookieStore = await cookies();
-  const raw = cookieStore.get(CART_COOKIE)?.value;
+/**
+ * Normalize raw quantities and enforce min/max limits.
+ */
+function normalizeQuantity(raw: unknown): number {
+  const n = Number(raw);
+  const base = Number.isFinite(n) ? Math.floor(n) : MIN_QTY_PER_ITEM;
+  return Math.max(MIN_QTY_PER_ITEM, Math.min(MAX_QTY_PER_ITEM, base));
+}
 
-  if (!raw) return getEmptyCart();
-
-  try {
-    const parsed = JSON.parse(raw) as Cart;
-    if (!parsed || !Array.isArray(parsed.items)) return getEmptyCart();
-    return parsed;
-  } catch {
+/**
+ * Read the cart for a given user from the database.
+ *
+ * Returns a Cart shape that matches your previous cookie-based version:
+ * - storeId is inferred from the first item's storeId (or null if empty)
+ * - items are limited and quantities are clamped
+ */
+export async function getCartForUser(userId: string): Promise<Cart> {
+  if (!userId) {
     return getEmptyCart();
   }
-}
 
-export async function writeCartToCookies(cart: Cart) {
-  const cookieStore = await cookies();
-  cookieStore.set(CART_COOKIE, JSON.stringify(cart), {
-    httpOnly: true,
-    path: "/",
-    sameSite: "lax",
-    // You can tweak these for prod:
-    secure: process.env.NODE_ENV === "production",
-    maxAge: 60 * 60 * 24 * 7, // 7 days
+  const cart = await prisma.cart.findFirst({
+    where: { customerId: userId },
+    include: {
+      items: {
+        include: {
+          product: {
+            select: {
+              id: true,
+              name: true,
+              priceCents: true,
+              storeId: true,
+              isAvailable: true,
+            },
+          },
+        },
+      },
+    },
   });
+
+  if (!cart || !cart.items.length) {
+    return getEmptyCart();
+  }
+
+  // Filter out items whose product no longer exists or is unavailable
+  const validItems = cart.items.filter((ci) => ci.product && ci.product.isAvailable);
+
+  if (!validItems.length) {
+    return getEmptyCart();
+  }
+
+  // Enforce a maximum number of distinct line items (same as cookie version)
+  const limited = validItems.slice(0, MAX_ITEMS_PER_CART);
+
+  const mapped: CartItem[] = limited.map((ci) => ({
+    productId: ci.productId,
+    name: ci.product.name,
+    priceCents: ci.product.priceCents,
+    quantity: normalizeQuantity(ci.quantity),
+    storeId: ci.product.storeId,
+  }));
+
+  const storeId = mapped[0]?.storeId ?? null;
+
+  return {
+    storeId,
+    items: mapped,
+  };
 }
 
+/**
+ * Clear the cart for a user (used after successful order, or "clear cart" action).
+ */
+export async function clearCartForUser(userId: string): Promise<void> {
+  if (!userId) return;
+
+  // Find all carts for this user (you probably only have one, but this is safe)
+  const carts = await prisma.cart.findMany({
+    where: { customerId: userId },
+    select: { id: true },
+  });
+
+  if (!carts.length) return;
+
+  const cartIds = carts.map((c) => c.id);
+
+  // Delete items first, then carts
+  await prisma.$transaction([
+    prisma.cartItem.deleteMany({
+      where: { cartId: { in: cartIds } },
+    }),
+    prisma.cart.deleteMany({
+      where: { id: { in: cartIds } },
+    }),
+  ]);
+}
+
+/**
+ * Compute totals for a cart.
+ */
 export function calculateCartTotals(cart: Cart) {
   const itemCount = cart.items.reduce((sum, item) => sum + item.quantity, 0);
   const subtotalCents = cart.items.reduce(
     (sum, item) => sum + item.quantity * item.priceCents,
-    0
+    0,
   );
 
   return { itemCount, subtotalCents };

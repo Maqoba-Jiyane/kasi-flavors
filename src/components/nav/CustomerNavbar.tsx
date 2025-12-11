@@ -207,16 +207,7 @@ export default function CustomerNavbar({
                 My orders
               </Link>
 
-              {/* <div className="mt-2 px-3">
-                <Link
-                  href="/cart"
-                  className="block w-full rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white"
-                >
-                  Cart ({cartCount})
-                </Link>
-              </div> */}
-
-              <div className="mt-2 px-3 w-full flex flex-col justify-center items-center">
+              <div className="mt-2 w-full flex flex-col justify-center items-center">
                 <SignedIn>
                   <SignOutButton>
                     <div className="flex justify-center w-full rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700">
@@ -227,19 +218,19 @@ export default function CustomerNavbar({
                 </SignedIn>
 
                 <SignedOut>
-                  <SignInButton>
-                    <div className="flex cursor-pointer items-center gap-2">
-                      <LogIn className="h-4 w-4" />
-                      <span>Sign In</span>
-                    </div>
-                  </SignInButton>
+                  <div className="gap-0.5 flex flex-col w-full">
+                    <SignInButton>
+                      <div className="flex justify-center w-full rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
+                        <span>Sign In</span>
+                      </div>
+                    </SignInButton>
 
-                  <SignUpButton>
-                    <div className="flex cursor-pointer items-center gap-2">
-                      <User className="h-4 w-4" />
-                      <span>Sign Up</span>
-                    </div>
-                  </SignUpButton>
+                    <SignUpButton>
+                      <div className="flex justify-center w-full rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
+                        <span>Sign Up</span>
+                      </div>
+                    </SignUpButton>
+                  </div>
                 </SignedOut>
               </div>
             </div>

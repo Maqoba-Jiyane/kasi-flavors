@@ -2,6 +2,32 @@
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser, assertRole } from "@/lib/auth";
 import type { Order, Store } from "@prisma/client";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  // Admin layout applies template: "%s | Admin | Kasi Flavors"
+  title: "Platform overview",
+  description:
+    "See platform-wide orders, revenue, prep times, and store performance across all Kasi Flavors stores.",
+  alternates: {
+    // Ignore ?range= filters – keep a single canonical
+    canonical: "/admin/overview",
+  },
+  openGraph: {
+    type: "website",
+    title: "Platform overview | Admin | Kasi Flavors",
+    description:
+      "Monitor platform-wide performance including orders, revenue, active stores, and average prep times across Kasi Flavors.",
+    url: "/admin/overview",
+  },
+  twitter: {
+    card: "summary",
+    title: "Platform overview | Admin | Kasi Flavors",
+    description:
+      "Admin view of global orders, revenue and store activity across the Kasi Flavors platform.",
+  },
+  // robots are already handled at the admin layout level (noindex, nofollow)
+};
 
 type RangeOption = "7d" | "30d" | "all";
 

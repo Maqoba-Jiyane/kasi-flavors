@@ -7,11 +7,13 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "postinstall": "prisma generate && npx puppeteer browsers install chrome"
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.35.5",
     "@radix-ui/react-slot": "^1.2.4",
+    "@upstash/qstash": "^2.8.4",
+    "@upstash/qstash-cli": "^2.30.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
@@ -21,8 +23,10 @@
     "nodemailer": "^7.0.11",
     "react": "19.2.0",
     "react-dom": "19.2.0",
+    "react-hot-toast": "^2.6.0",
     "svix": "^1.81.0",
     "tailwind-merge": "^3.4.0",
+    "twilio": "^5.10.7",
     "zod": "^4.1.13"
   },
   "devDependencies": {

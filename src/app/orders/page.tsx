@@ -4,6 +4,38 @@ import { getCurrentUser, assertRole } from "@/lib/auth";
 import Link from "next/link";
 import OrderActionsClient from "@/components/orders/OrderActionsClient";
 import type { Order,  } from "@prisma/client";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "My orders", // becomes "My orders | Kasi Flavors" via root template
+  description:
+    "View your active and past kasi food orders placed with your Kasi Flavors account.",
+  alternates: {
+    canonical: "/orders",
+  },
+  openGraph: {
+    type: "website",
+    title: "My orders | Kasi Flavors",
+    description:
+      "Track active orders and review your past kasi food orders on Kasi Flavors.",
+    url: "/orders",
+  },
+  twitter: {
+    card: "summary",
+    title: "My orders | Kasi Flavors",
+    description:
+      "See your active and past kasi food orders linked to your Kasi Flavors account.",
+  },
+  robots: {
+    index: false,
+    follow: false, // internal/account area; no need for bots to follow
+    googleBot: {
+      index: false,
+      follow: false,
+      noimageindex: true,
+    },
+  },
+};
 
 type Row = {
   id: string;
@@ -64,16 +96,7 @@ function StatusPill({ status }: { status: string }) {
 
 export default async function OrdersPage() {
   const user = await getCurrentUser();
-  assertRole(user, ["CUSTOMER", "ADMIN", "STORE_OWNER"]); // allow customers primarily; admins/stores may view their orders too
-
-  if (!user) {
-    // If you prefer redirect to signin, replace with redirect("/sign-in")
-    return (
-      <main className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
-        <p className="text-sm text-slate-600 dark:text-slate-300">You must be signed in to view your orders.</p>
-      </main>
-    );
-  }
+  assertRole(user, ["CUSTOMER", "ADMIN"]); // allow customers primarily; admins/stores may view their orders too
 
   // Fetch orders for this user (customerId)
   const ordersRaw = await prisma.order.findMany({
@@ -85,8 +108,6 @@ export default async function OrdersPage() {
     orderBy: { createdAt: "desc" },
     take: 200,
   });
-
-  console.log(user.id)
 
   const mapped: Row[] = ordersRaw.map((o) => ({
     id: o.id,

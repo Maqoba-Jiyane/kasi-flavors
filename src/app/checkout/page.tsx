@@ -1,61 +1,85 @@
+// app/(public)/checkout/page.tsx
 import { prisma } from "@/lib/prisma";
+import { getCurrentUserMinimal } from "@/lib/auth";
+import { getCartForUser, calculateCartTotals, formatPrice } from "@/lib/cart";
 import { CheckoutForm } from "@/components/CheckoutForm";
-import { getCurrentUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Checkout", // becomes "Checkout | Kasi Flavors" via root template
+  description:
+    "Confirm your order details and complete checkout for your kasi food from Kasi Flavors.",
+  alternates: {
+    canonical: "/checkout",
+  },
+  openGraph: {
+    type: "website",
+    title: "Checkout | Kasi Flavors",
+    description:
+      "Review your kasi food order and securely complete checkout with Kasi Flavors.",
+    url: "/checkout",
+  },
+  twitter: {
+    card: "summary",
+    title: "Checkout | Kasi Flavors",
+    description:
+      "Confirm your kasi food order details and complete checkout with Kasi Flavors.",
+  },
+  robots: {
+    index: false,
+    follow: false, // internal, auth-only step
+    googleBot: {
+      index: false,
+      follow: false,
+      noimageindex: true,
+    },
+  },
+};
 
 interface CheckoutPageProps {
-  searchParams: Promise<{
+  searchParams?: Promise<{
     storeId?: string;
-    items?: string;
   }>;
 }
 
-export default async function CheckoutPage({
-  searchParams,
-}: CheckoutPageProps) {
-  const { items, storeId } = await searchParams;
-  const itemsParam = items;
+export default async function CheckoutPage({ searchParams }: CheckoutPageProps) {
+  const user = await getCurrentUserMinimal();
 
-  const user = await getCurrentUser();
-
+  // Require auth for checkout
   if (!user) {
-    redirect('/sign-in?redirectUrl=/cart')
+    redirect("/sign-in?redirectUrl=/checkout");
   }
 
-  console.log("storeId: ", storeId)
+  const queryStoreIdParams = await searchParams
 
-  if (!storeId || !itemsParam) {
+  const queryStoreId = queryStoreIdParams?.storeId
+
+  // Load cart from DB
+  const cart = await getCartForUser(user.id);
+
+  if (!cart.items.length || !cart.storeId) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 dark:bg-slate-950">
         <p className="text-sm text-slate-600 dark:text-slate-300">
-          No cart data. Please go back to the store and try again.
+          Your cart is empty. Please add items before checking out.
         </p>
       </main>
     );
   }
 
-  let parsedItems: { productId: string; quantity: number }[] = [];
-  try {
-    parsedItems = JSON.parse(decodeURIComponent(itemsParam));
-  } catch {
+  // If a storeId is provided in the URL, it must match the cart's storeId
+  if (queryStoreId && queryStoreId !== cart.storeId) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 dark:bg-slate-950">
         <p className="text-sm text-slate-600 dark:text-slate-300">
-          Could not read your cart. Please go back and try again.
+          The store in your cart does not match the selected store. Please go back and try again.
         </p>
       </main>
     );
   }
 
-  if (parsedItems.length === 0) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 dark:bg-slate-950">
-        <p className="text-sm text-slate-600 dark:text-slate-300">
-          Your cart is empty.
-        </p>
-      </main>
-    );
-  }
+  const storeId = cart.storeId;
 
   const store = await prisma.store.findUnique({
     where: { id: storeId },
@@ -65,31 +89,29 @@ export default async function CheckoutPage({
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 dark:bg-slate-950">
         <p className="text-sm text-slate-600 dark:text-slate-300">
-          Store not found.
+          Store not found. Please go back and try again.
         </p>
       </main>
     );
   }
 
-  const productIds = parsedItems.map((i) => i.productId);
-  const products = await prisma.product.findMany({
-    where: { id: { in: productIds }, storeId: store.id },
-  });
+  // Build line items from the DB-backed cart
+  const lineItems = cart.items.map((item) => ({
+    productId: item.productId,
+    name: item.name,
+    quantity: item.quantity,
+    unitCents: item.priceCents,
+    totalCents: item.priceCents * item.quantity,
+  }));
 
-  const lineItems = parsedItems.map((item) => {
-    const product = products.find((p) => p.id === item.productId);
-    return {
-      product,
-      quantity: item.quantity,
-    };
-  });
+  const { subtotalCents } = calculateCartTotals(cart);
+  const totalFormatted = formatPrice(subtotalCents);
 
-  const totalCents = lineItems.reduce((sum, li) => {
-    if (!li.product) return sum;
-    return sum + li.product.priceCents * li.quantity;
-  }, 0);
-
-  const totalFormatted = `R ${(totalCents / 100).toFixed(2)}`;
+  // This is what we pass to the POST API; still { productId, quantity }[]
+  const itemsForPayload = lineItems.map((li) => ({
+    productId: li.productId,
+    quantity: li.quantity,
+  }));
 
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-6 dark:bg-slate-950">
@@ -107,21 +129,17 @@ export default async function CheckoutPage({
             Order summary
           </h2>
           <ul className="space-y-1">
-            {lineItems.map((li, idx) =>
-              li.product ? (
-                <li
-                  key={li.product.id + idx}
-                  className="flex items-center justify-between text-sm text-slate-700 dark:text-slate-200"
-                >
-                  <span>
-                    {li.quantity}x {li.product.name}
-                  </span>
-                  <span>
-                    R {((li.product.priceCents * li.quantity) / 100).toFixed(2)}
-                  </span>
-                </li>
-              ) : null
-            )}
+            {lineItems.map((li) => (
+              <li
+                key={li.productId}
+                className="flex items-center justify-between text-sm text-slate-700 dark:text-slate-200"
+              >
+                <span>
+                  {li.quantity}x {li.name}
+                </span>
+                <span>{formatPrice(li.totalCents)}</span>
+              </li>
+            ))}
           </ul>
           <div className="mt-3 flex items-center justify-between border-t border-slate-200 pt-2 text-sm font-semibold text-slate-900 dark:border-slate-700 dark:text-slate-50">
             <span>Total</span>
@@ -132,8 +150,9 @@ export default async function CheckoutPage({
         {/* Checkout form */}
         <CheckoutForm
           storeId={storeId}
-          itemsJson={JSON.stringify(parsedItems)}
+          itemsJson={JSON.stringify(itemsForPayload)}
           totalFormatted={totalFormatted}
+          user={user}
         />
       </div>
     </main>

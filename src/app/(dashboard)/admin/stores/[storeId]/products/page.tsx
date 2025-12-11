@@ -76,7 +76,7 @@ export default async function StoreProductsPage({
   const user = await getCurrentUser();
   assertRole(user, ["ADMIN"]);
 
-  const {storeId} = await params
+  const { storeId } = await params;
 
   const store = await prisma.store.findUnique({
     where: { id: storeId },
@@ -154,7 +154,7 @@ export default async function StoreProductsPage({
       </section>
 
       {/* Products table */}
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white text-xs shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <section className="max-sm:hidden overflow-hidden rounded-xl border border-slate-200 bg-white text-xs shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <table className="min-w-full divide-y divide-slate-100 dark:divide-slate-800">
           <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500 dark:bg-slate-950/40 dark:text-slate-400">
             <tr>
@@ -183,9 +183,7 @@ export default async function StoreProductsPage({
                   {p.name}
                 </td>
                 <td className="px-3 py-2 text-slate-600 dark:text-slate-300">
-                  <span className="line-clamp-2">
-                    {p.description || "—"}
-                  </span>
+                  <span className="line-clamp-2">{p.description || "—"}</span>
                 </td>
                 <td className="px-3 py-2 text-right text-slate-800 dark:text-slate-100">
                   {formatPrice(p.priceCents)}
@@ -223,6 +221,62 @@ export default async function StoreProductsPage({
             ))}
           </tbody>
         </table>
+      </section>
+
+      <section className="space-y-3 md:hidden">
+        {products.length === 0 && (
+          <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+            <p>No products yet. Add a product using the form above.</p>
+          </div>
+        )}
+
+        {products.map((p) => (
+          <article
+            key={p.id}
+            className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900"
+          >
+            <header className="mb-1 flex items-start justify-between gap-2">
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+                {p.name}
+              </h3>
+              <span
+                className={[
+                  "inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                  p.isAvailable
+                    ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200"
+                    : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
+                ].join(" ")}
+              >
+                {p.isAvailable ? "Available" : "Hidden"}
+              </span>
+            </header>
+
+            <p className="mb-2 line-clamp-2 text-[11px] text-slate-600 dark:text-slate-300">
+              {p.description || "No description"}
+            </p>
+
+            <p className="mb-3 text-sm font-medium text-slate-900 dark:text-slate-50">
+              {formatPrice(p.priceCents)}
+            </p>
+
+            <form action={toggleAvailability}>
+              <input type="hidden" name="productId" value={p.id} />
+              <input type="hidden" name="storeId" value={store.id} />
+              <input
+                type="hidden"
+                name="current"
+                value={String(p.isAvailable)}
+              />
+
+              <button
+                type="submit"
+                className="inline-flex h-10 w-full items-center justify-center rounded-full border border-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50 active:scale-[0.98] dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                {p.isAvailable ? "Hide from menu" : "Show on menu"}
+              </button>
+            </form>
+          </article>
+        ))}
       </section>
     </main>
   );

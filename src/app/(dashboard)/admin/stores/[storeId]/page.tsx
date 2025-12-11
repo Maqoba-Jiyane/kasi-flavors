@@ -15,7 +15,7 @@ export default async function AdminStoreDetailPage({
   const user = await getCurrentUser();
   assertRole(user, ["ADMIN"]);
 
-  const {storeId} = await params;
+  const { storeId } = await params;
 
   const store = await prisma.store.findUnique({
     where: { id: storeId },
@@ -48,13 +48,6 @@ export default async function AdminStoreDetailPage({
     (o) => o.status === "COMPLETED"
   ).length;
 
-  const pendingOrders = store.orders.filter(
-    (o) =>
-      o.status === "PENDING" ||
-      o.status === "ACCEPTED" ||
-      o.status === "IN_PREPARATION"
-  ).length;
-
   function formatPrice(cents: number) {
     return `R ${(cents / 100).toFixed(2)}`;
   }
@@ -72,12 +65,21 @@ export default async function AdminStoreDetailPage({
           </p>
         </div>
 
-        <Link
-          href="/admin/stores"
-          className="rounded-full bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-300"
-        >
-          Back to stores
-        </Link>
+        <div className="flex gap-1">
+          <Link
+            href="/admin/stores"
+            className="rounded-full bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-300"
+          >
+            Back to stores
+          </Link>
+
+          <Link
+            href={`/admin/stores/${storeId}/products`}
+            className="rounded-full bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-300"
+          >
+            Manage
+          </Link>
+        </div>
       </div>
 
       {/* Store Overview */}
@@ -89,10 +91,7 @@ export default async function AdminStoreDetailPage({
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <OverviewCard label="Total Products" value={totalProducts} />
           <OverviewCard label="Total Orders" value={totalOrders} />
-          <OverviewCard
-            label="Completed Orders"
-            value={completedOrders}
-          />
+          <OverviewCard label="Completed Orders" value={completedOrders} />
           <OverviewCard
             label="Total Revenue"
             value={formatPrice(totalRevenueCents)}
@@ -126,7 +125,10 @@ export default async function AdminStoreDetailPage({
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {store.products.map((product) => (
-                  <tr key={product.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                  <tr
+                    key={product.id}
+                    className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40"
+                  >
                     <Td>{product.name}</Td>
                     <Td>{formatPrice(product.priceCents)}</Td>
                     <Td>
@@ -172,7 +174,10 @@ export default async function AdminStoreDetailPage({
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {store.orders.map((order) => (
-                  <tr key={order.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                  <tr
+                    key={order.id}
+                    className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40"
+                  >
                     <Td>#{order.id.slice(-6)}</Td>
                     <Td>{order.customerName}</Td>
                     <Td>{formatPrice(order.totalCents)}</Td>
