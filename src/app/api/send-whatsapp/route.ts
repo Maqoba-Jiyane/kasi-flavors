@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import twilio from "twilio";
 
-export const runtime = "node"; // ensure Node runtime (not edge) because twilio Node SDK uses sockets
+export const runtime = "nodejs"; // ensure Node runtime (not edge) because twilio Node SDK uses sockets
 
 const {
   TWILIO_ACCOUNT_SID,

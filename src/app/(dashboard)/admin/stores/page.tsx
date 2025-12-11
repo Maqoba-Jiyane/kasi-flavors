@@ -327,7 +327,7 @@ export default async function AdminStoresPage({
 
             {rows.map(({ store, orders, revenueCents, lastOrderAt }) => {
               const ownerName =
-                (store.owner?.firstName + " " + store.owner.lastName) || store.owner?.email || "—";
+                (store.owner?.name + " " + store.owner.name) || store.owner?.email || "—";
               const ownerEmail = store.owner?.email || null;
               const location = store.area
                 ? `${store.area}, ${store.city}`
