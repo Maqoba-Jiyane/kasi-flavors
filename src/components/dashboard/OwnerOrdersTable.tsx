@@ -6,6 +6,7 @@ import {
   updateOrderStatus,
   confirmOrderWithCode,
 } from "@/app/(dashboard)/owner/store/orders/actions";
+import toast from "react-hot-toast";
 
 type OwnerOrderItem = {
   id: string;
@@ -60,6 +61,24 @@ function formatDate(d: Date) {
   });
 }
 
+async function handleStatusUpdate(formData: FormData) {
+  try {
+    const res = await updateOrderStatus(formData);
+
+    console.log(res?.success)
+
+    if (!res?.success) {
+      toast.error(res?.error || "Failed to update status");
+      return;
+    }
+
+    toast.success("Status updated!");
+  } catch (err) {
+    console.error("updateOrderStatus failed:", err);
+    toast.error("Server error. Please try again.");
+  }
+}
+
 export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
   const hasOrders = orders.length > 0;
 
@@ -69,7 +88,7 @@ export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
       <div className="space-y-3 md:hidden">
         {!hasOrders && (
           <p className="text-center text-sm text-slate-500 dark:text-slate-300">
-            No orders yet.
+            No orders to show for the current filters.
           </p>
         )}
 
@@ -81,7 +100,12 @@ export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
           return (
             <div
               key={order.id}
-              className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900"
+              className={[
+                "rounded-xl border bg-white p-3 shadow-sm dark:bg-slate-900",
+                isReady
+                  ? "border-emerald-300/70 dark:border-emerald-500/60"
+                  : "border-slate-200 dark:border-slate-800",
+              ].join(" ")}
             >
               {/* Header row: ref + status */}
               <div className="flex items-center justify-between gap-3">
@@ -90,11 +114,10 @@ export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
                     #{order.shortId}
                   </p>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    {formatDate(order.createdAt)} ·{" "}
-                    {formatTime(order.createdAt)}
+                    {formatDate(order.createdAt)} · {formatTime(order.createdAt)}
                   </p>
                   <p className="mt-1 text-xs text-slate-700 dark:text-slate-200">
-                    {order.customerName}
+                    {order.customerName || "Walk-in customer"}
                   </p>
                 </div>
                 <StatusBadge status={order.status} />
@@ -126,10 +149,7 @@ export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
                     <p className="mb-1 font-semibold">Items</p>
                     <ul className="space-y-1">
                       {order.items.map((item) => (
-                        <li
-                          key={item.id}
-                          className="flex justify-between"
-                        >
+                        <li key={item.id} className="flex justify-between">
                           <span>
                             {item.quantity}× {item.name}
                           </span>
@@ -157,21 +177,17 @@ export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
                         : "Delivery"}
                     </span>
                     {order.estimatedReadyAt && (
-                      <span>
-                        ETA: {formatTime(order.estimatedReadyAt)}
-                      </span>
+                      <span>ETA: {formatTime(order.estimatedReadyAt)}</span>
                     )}
                   </div>
 
-                  {/* Note / sauces */}
+                  {/* Note */}
                   {order.note && order.note.trim() !== "" && (
                     <div className="rounded-lg bg-slate-50 p-2 text-[11px] text-slate-700 dark:bg-slate-950/60 dark:text-slate-200">
                       <p className="font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
                         Notes / sauces / spice
                       </p>
-                      <p className="mt-1 whitespace-pre-line">
-                        {order.note}
-                      </p>
+                      <p className="mt-1 whitespace-pre-line">{order.note}</p>
                     </div>
                   )}
 
@@ -179,14 +195,10 @@ export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
                   <div className="space-y-2">
                     {/* Status select */}
                     <form
-                      action={updateOrderStatus}
+                      action={handleStatusUpdate}
                       className="flex flex-wrap items-center justify-between gap-2"
                     >
-                      <input
-                        type="hidden"
-                        name="orderId"
-                        value={order.id}
-                      />
+                      <input type="hidden" name="orderId" value={order.id} />
                       <select
                         name="status"
                         defaultValue={order.status}
@@ -244,7 +256,7 @@ export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
       </div>
 
       {/* DESKTOP: table */}
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900 md:block hidden">
+      <div className="hidden overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900 md:block">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
             <thead className="bg-slate-50 dark:bg-slate-950/40">
@@ -282,7 +294,7 @@ export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
                     colSpan={8}
                     className="px-4 py-6 text-center text-sm text-slate-500 dark:text-slate-300"
                   >
-                    No orders yet.
+                    No orders to show for the current filters.
                   </td>
                 </tr>
               )}
@@ -295,7 +307,12 @@ export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
                 return (
                   <tr
                     key={order.id}
-                    className="hover:bg-slate-50/60 dark:hover:bg-slate-800/60"
+                    className={[
+                      "hover:bg-slate-50/60 dark:hover:bg-slate-800/60",
+                      isReady
+                        ? "bg-emerald-50/40 dark:bg-emerald-950/10"
+                        : "",
+                    ].join(" ")}
                   >
                     {/* Order ID + date */}
                     <td className="whitespace-nowrap px-4 py-3 align-middle">
@@ -313,7 +330,7 @@ export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
                     {/* Customer */}
                     <td className="whitespace-nowrap px-4 py-3 align-middle">
                       <span className="text-sm text-slate-800 dark:text-slate-50">
-                        {order.customerName}
+                        {order.customerName || "Walk-in customer"}
                       </span>
                     </td>
 
@@ -361,7 +378,7 @@ export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
                     <td className="whitespace-nowrap px-4 py-3 text-right align-middle">
                       {/* Status update */}
                       <form
-                        action={updateOrderStatus}
+                        action={handleStatusUpdate}
                         className="flex items-center justify-end gap-2"
                       >
                         <input

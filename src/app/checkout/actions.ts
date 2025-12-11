@@ -91,7 +91,7 @@ export async function placeOrderAction(formData: FormData) {
       customerPhone: payload.phone ?? null,
       customerEmail: payload.email,
       fulfilmentType: payload.fulfilmentType,
-      paymentMethod: "CASH_ON_DELIVERY",
+      paymentMethod: payload.fulfilmentType === "DELIVERY" ? "CASH_ON_DELIVERY" : "CASH_ON_COLLECTION",
       totalCents,
       deliveryAddress:
         payload.fulfilmentType === "DELIVERY" ? payload.address ?? "" : null,

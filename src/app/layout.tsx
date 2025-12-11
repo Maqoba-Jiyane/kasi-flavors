@@ -3,9 +3,9 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
 import CustomerNavbar from "@/components/nav/CustomerNavbar";
-import { readCartFromCookies } from "@/lib/cart";
-import { getCurrentUser } from "@/lib/auth";
 import AdminNavbar from "@/components/nav/AdminNavbar";
+import { getCartForUser, getEmptyCart } from "@/lib/cart";
+import { getCurrentUserMinimal } from "@/lib/auth";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -27,8 +27,15 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const cart = await readCartFromCookies();
-  const user = await getCurrentUser();
+  const user = await getCurrentUserMinimal();
+
+  // If no user, cart is empty. If user exists, read cart from DB.
+  const cart = user ? await getCartForUser(user.id) : getEmptyCart();
+
+  // You can use either distinct line count or total quantity.
+  // Previously you used `cart.items.length`, so I’ve kept that.
+  const cartCount = cart.items.reduce((sum, i) => sum + i.quantity, 0);
+
   return (
     <ClerkProvider>
       <html lang="en">
@@ -38,10 +45,7 @@ export default async function RootLayout({
           {user?.role === "ADMIN" ? (
             <AdminNavbar />
           ) : (
-            <CustomerNavbar
-              cartCount={cart.items.length}
-              userName={user?.name}
-            />
+            <CustomerNavbar cartCount={cartCount} userName={user?.name} />
           )}
           <main>{children}</main>
         </body>

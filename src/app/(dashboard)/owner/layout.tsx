@@ -80,6 +80,7 @@ export default async function OwnerLayout({ children }: OwnerLayoutProps) {
 
       {/* Page content */}
       <main className="px-4 py-4">
+      <ToasterProvider />
         <div className="mx-auto max-w-6xl">{children}</div>
       </main>
     </div>
@@ -89,6 +90,7 @@ export default async function OwnerLayout({ children }: OwnerLayoutProps) {
 // Simple server-side nav link (no active highlight yet; you can upgrade later)
 import Link from "next/link";
 import OwnerNavbar from "@/components/nav/OwnerNavbar";
+import { ToasterProvider } from "@/components/ui/ToasterProvider";
 
 interface OwnerNavLinkProps {
   href: string;

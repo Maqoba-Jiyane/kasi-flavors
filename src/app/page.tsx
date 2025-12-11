@@ -1,17 +1,25 @@
 import { prisma } from "@/lib/prisma";
 import { StoreCard } from "@/components/StoreCard";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUserMinimal } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
-import { Button } from "@/components/ui/button";
-import Link from "next/link";
 
 export default async function HomePage() {
+
   const stores = await prisma.store.findMany({
     orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      area: true,
+      city: true,
+      description: true,
+      avgPrepTimeMinutes: true,
+      isOpen: true
+    }
   });
 
-  const user = await getCurrentUser();
+  const user = await getCurrentUserMinimal();
 
   // If store owner, don't allow them to see the customer homepage.
   if (user?.role === "STORE_OWNER") {

@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { MenuItemCard, MenuItem } from "@/components/MenuItemCard";
-import { CartSummaryBar } from "@/components/CartSummaryBar"
+import { CartSummaryBar } from "@/components/CartSummaryBar";
 
 type CartItem = {
   productId: string;
@@ -22,42 +22,61 @@ export function StoreMenuClient({
   const [cart, setCart] = useState<CartItem[]>([]);
   const router = useRouter();
 
-  useEffect(() => {
-    const readCookies = async()=>{
-      const res = await fetch('/api/customers/orders', {
+  // Helper to load cart from server (cookie)
+  async function loadCartFromServer() {
+    try {
+      const res = await fetch("/api/customers/orders", {
         method: "GET",
+        cache: "no-store",
       });
-      
-      if(res.ok){
-        const cartItemsArray: CartItem[] = []
-        const cart = await res.json()
-        console.log(cart.cart)
-        cart.cart.map((item: { productId: string; quantity: number; }) => {
-          const cartItem = {
-            productId: item.productId,
-            quantity: item.quantity
-          }
-          cartItemsArray.push(cartItem)
-        })
-  
-        setCart(cartItemsArray)
+
+      if (!res.ok) {
+        return;
       }
+
+      const data = await res.json();
+
+      // Expecting shape: { success: true, cart: Array<{ productId, quantity, ... }> }
+      if (!data?.cart || !Array.isArray(data.cart)) {
+        return;
+      }
+
+      const cartItemsArray: CartItem[] = data.cart.map(
+        (item: { productId: string; quantity: number }) => ({
+          productId: item.productId,
+          quantity: item.quantity,
+        }),
+      );
+
+      setCart(cartItemsArray);
+    } catch {
+      // Fail silently on network errors – UI just shows empty cart in that case
     }
-    readCookies()
+  }
+
+  // Initial load from cookie-backed API
+  useEffect(() => {
+    loadCartFromServer();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleAddToCart = (productId: string, quantity: number) => {
+  const handleAddToCart = async (productId: string, quantity: number) => {
+    // Optimistic local update (optional)
     setCart((prev) => {
       const existing = prev.find((i) => i.productId === productId);
       if (existing) {
         return prev.map((i) =>
           i.productId === productId
             ? { ...i, quantity: i.quantity + quantity }
-            : i
+            : i,
         );
       }
       return [...prev, { productId, quantity }];
     });
+
+    // After the server action runs inside MenuItemCard,
+    // refresh from server so we respect server-side clamping / validation.
+    await loadCartFromServer();
   };
 
   const { itemCount, totalCents } = useMemo(() => {
@@ -75,12 +94,7 @@ export function StoreMenuClient({
   }, [cart, products]);
 
   const handleCheckout = () => {
-    if (cart.length === 0) return;
-
-    // MVP: pass cart via query string.
-    // For large carts, you would store this server-side or in DB instead.
-    const itemsParam = encodeURIComponent(JSON.stringify(cart));
-    router.push(`/cart?storeSlug=${storeSlug}&items=${itemsParam}`);
+    router.push("/cart");
   };
 
   return (

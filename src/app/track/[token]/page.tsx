@@ -63,8 +63,6 @@ function getStatusMessage(args: {
 export default async function TrackOrderPage({ params }: TrackPageProps) {
   const {token} = await params;
 
-  console.log('track token: ', token)
-
   const order = await prisma.order.findUnique({
     where: { trackingToken: token },
     include: {

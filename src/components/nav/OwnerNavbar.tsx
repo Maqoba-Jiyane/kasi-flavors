@@ -21,9 +21,9 @@ export default function OwnerNavbar({
   const [loading, setLoading] = useState(false);
   const [storeIsOpen, setStoreIsOpen] = useState(isOpen);
   const links = [
-    // { href: `/owner/store`, label: "Overview" },
+    { href: `/owner/store/overview`, label: "Overview" },
     { href: `/owner/store/orders`, label: "Orders" },
-    // { href: `/owner/store/products`, label: "Products" },
+    { href: `/owner/store/billing`, label: "Billing" },
     { href: `/owner/store/analytics`, label: "Analytics" },
     // { href: `/owner/store/settings`, label: "Settings" },
   ];

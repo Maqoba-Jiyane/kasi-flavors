@@ -120,3 +120,35 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* 🔴 Pulsing red glow */
+@keyframes otp-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
+
+.otp-pulse {
+  animation: otp-pulse 1.4s ease-out infinite;
+  border-color: rgb(239, 68, 68) !important;
+}
+
+/* ❌ (Optional) Shake when the OTP is WRONG */
+@keyframes otp-shake {
+  0% { transform: translateX(0); }
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(3px); }
+  100% { transform: translateX(0); }
+}
+
+.otp-shake {
+  animation: otp-shake 0.35s ease-in-out;
+}

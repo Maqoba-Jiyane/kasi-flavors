@@ -64,16 +64,7 @@ function StatusPill({ status }: { status: string }) {
 
 export default async function OrdersPage() {
   const user = await getCurrentUser();
-  assertRole(user, ["CUSTOMER", "ADMIN", "STORE_OWNER"]); // allow customers primarily; admins/stores may view their orders too
-
-  if (!user) {
-    // If you prefer redirect to signin, replace with redirect("/sign-in")
-    return (
-      <main className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
-        <p className="text-sm text-slate-600 dark:text-slate-300">You must be signed in to view your orders.</p>
-      </main>
-    );
-  }
+  assertRole(user, ["CUSTOMER", "ADMIN"]); // allow customers primarily; admins/stores may view their orders too
 
   // Fetch orders for this user (customerId)
   const ordersRaw = await prisma.order.findMany({
@@ -85,8 +76,6 @@ export default async function OrdersPage() {
     orderBy: { createdAt: "desc" },
     take: 200,
   });
-
-  console.log(user.id)
 
   const mapped: Row[] = ordersRaw.map((o) => ({
     id: o.id,

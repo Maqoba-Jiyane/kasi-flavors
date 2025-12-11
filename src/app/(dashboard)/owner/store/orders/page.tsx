@@ -1,8 +1,15 @@
+// app/(dashboard)/owner/store/orders/page.tsx
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser, assertRole } from "@/lib/auth";
 import { OwnerOrdersTable } from "@/components/dashboard/OwnerOrdersTable";
 import Link from "next/link";
-import type { Order, OrderItem, Prisma } from "@prisma/client";
+import type {
+  Order,
+  OrderItem,
+  Prisma,
+  LedgerEntry,
+  LedgerType,
+} from "@prisma/client";
 import { LiveOrdersWatcher } from "@/components/dashboard/LiveOrdersWatcher";
 import { AddManualOrderClient } from "@/components/dashboard/AddManualOrderClient";
 
@@ -57,43 +64,100 @@ function getRangeStart(range: RangeOption, now: Date): Date | null {
   }
 }
 
+function formatMoney(cents: number) {
+  return `R ${(cents / 100).toFixed(2)}`;
+}
+
+function formatDateTime(d: Date) {
+  return d.toLocaleString("en-ZA", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+// Simple mapping for ledger type labels + signs
+function getLedgerTypeLabel(type: LedgerType) {
+  switch (type) {
+    case "TOPUP":
+      return "Top-up";
+    case "REFUND":
+      return "Refund";
+    case "FEE_DEBIT":
+      return "Platform fee";
+    case "FEE_RESERVE":
+      return "Fee reserve";
+    case "PAYOUT":
+      return "Payout";
+    case "ADJUSTMENT":
+      return "Adjustment";
+    default:
+      return type;
+  }
+}
+
+function isCreditPositiveType(type: LedgerType) {
+  return type === "TOPUP" || type === "REFUND";
+}
+
 export default async function OwnerOrdersPage({
   searchParams,
 }: OwnerOrdersPageProps) {
   const user = await getCurrentUser();
   assertRole(user, ["STORE_OWNER"]);
 
-  if (!user) {
-    throw new Error("Not authenticated");
-  }
-
   const store = await prisma.store.findUnique({
     where: { ownerId: user.id },
+    select: {
+      id: true,
+      name: true,
+      creditCents: true,
+    },
   });
 
+  // Handle "no store" gracefully instead of throwing
   if (!store) {
-    throw new Error("No store linked to this account");
+    return (
+      <main className="min-h-screen bg-slate-50 px-4 py-6 dark:bg-slate-950">
+        <div className="mx-auto max-w-3xl rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700 shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
+          <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-50">
+            No store linked to this account
+          </h1>
+          <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+            This owner account does not have a store configured yet. Please
+            contact support or complete your store setup.
+          </p>
+        </div>
+      </main>
+    );
   }
 
-  const srchParams = await searchParams;
+  // 🔹 NEW: Load recent ledger entries for this store
+  const ledgerEntries: LedgerEntry[] = await prisma.ledgerEntry.findMany({
+    where: { storeId: store.id },
+    orderBy: { createdAt: "desc" },
+    take: 3, // show latest 10 in UI
+  });
 
-  const sortParam = (srchParams?.sort as SortOption | undefined) ?? "time_desc";
-  const rangeParam = (srchParams?.range as RangeOption | undefined) ?? "30d";
-  const viewParam = (srchParams?.view as ViewOption | undefined) ?? "all";
+  const sort = await searchParams;
+  const range = await searchParams;
+  const view = await searchParams;
+  // const { sort, range, view} = await searchParams
+
+  const sortParam = (await (sort as SortOption | undefined)) ?? "time_desc";
+  const rangeParam = (range as RangeOption | undefined) ?? "30d";
+  const viewParam = (view as ViewOption | undefined) ?? "all";
 
   const now = new Date();
   const rangeStart = getRangeStart(rangeParam, now);
 
-  // Base where clause
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const where: any = { storeId: store.id };
+  // Typed where clause
+  const where: Prisma.OrderWhereInput = {
+    storeId: store.id,
+    ...(rangeStart && { createdAt: { gte: rangeStart } }),
+  };
 
-  if (rangeStart) {
-    where.createdAt = { gte: rangeStart };
-  }
-
-  // For time-based sorts we use Prisma orderBy,
-  // for status sort we sort in JS afterwards.
   const prismaOrderBy: Prisma.OrderOrderByWithRelationInput =
     sortParam === "time_asc" ? { createdAt: "asc" } : { createdAt: "desc" };
 
@@ -103,7 +167,7 @@ export default async function OwnerOrdersPage({
     include: {
       items: true,
     },
-    take: 200,
+    take: 200, // safety cap
   });
 
   const products = await prisma.product.findMany({
@@ -120,7 +184,6 @@ export default async function OwnerOrdersPage({
     sorted = ordersRaw;
   }
 
-  // Assuming `sorted` is your raw Prisma orders array (before mapping)
   const latestOrderId = sorted.length > 0 ? sorted[0].id : null;
 
   // Filter by view
@@ -158,12 +221,15 @@ export default async function OwnerOrdersPage({
       ? "Last 30 days"
       : "All time";
 
+  const currentBalance = store.creditCents ?? 0;
+  const isNegativeBalance = currentBalance < 0;
+
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-6 dark:bg-slate-950">
       <div className="mx-auto max-w-5xl space-y-4">
-        {/* Header */}
-        <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex justify-between lg:flex-col lg:gap-4">
+        {/* Header + Balance card */}
+        <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex flex-col gap-2">
             <div>
               <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-50">
                 Orders
@@ -176,7 +242,44 @@ export default async function OwnerOrdersPage({
                 .
               </p>
             </div>
-            {/* <ToggleStoreButton initialState={store.isOpen} storeId={store.id} /> */}
+
+            {/* 🔹 NEW: Store balance card */}
+            <div className="mt-2 inline-flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              {/* ...inside your component... */}
+              <div>
+                <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  Store balance
+                </p>
+
+                <p
+                  className={[
+                    "mt-0.5 text-base font-semibold",
+                    isNegativeBalance
+                      ? "text-red-600 dark:text-red-400"
+                      : "text-emerald-700 dark:text-emerald-300",
+                  ].join(" ")}
+                >
+                  {formatMoney(currentBalance)}
+                </p>
+
+                <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                  {isNegativeBalance
+                    ? "Your balance is negative. You’ll need to top up before opening your store."
+                    : "Positive balance available for platform fees."}
+                </p>
+
+                {isNegativeBalance && (
+                  <div className="mt-2">
+                    <Link
+                      href="/owner/store/billing"
+                      className="inline-flex items-center rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
+                    >
+                      View billing
+                    </Link>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Controls: Sort + Range + View */}
@@ -251,10 +354,98 @@ export default async function OwnerOrdersPage({
             </div>
           </div>
         </header>
+
+        {/* 🔹 NEW: Recent transactions panel */}
+        <section className="rounded-xl border border-slate-200 bg-white p-4 text-xs shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+              Recent transactions
+            </h2>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400">
+              Showing last {ledgerEntries.length} entries
+            </span>
+          </div>
+
+          {ledgerEntries.length === 0 ? (
+            <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+              No ledger activity yet. When you complete orders, pay fees, or top
+              up, entries will show here.
+            </p>
+          ) : (
+            <div className="mt-3 overflow-x-auto">
+              <table className="min-w-full text-left text-[11px] text-slate-700 dark:text-slate-200">
+                <thead className="border-b border-slate-100 text-[10px] uppercase tracking-wide text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                  <tr>
+                    <th className="py-1 pr-3">Date</th>
+                    <th className="py-1 pr-3">Type</th>
+                    <th className="py-1 pr-3">Order</th>
+                    <th className="py-1 pr-3 text-right">Amount</th>
+                    <th className="py-1 pr-3 text-right">Balance</th>
+                    <th className="py-1 pr-3">Note</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ledgerEntries.map((entry) => {
+                    const isPositive = isCreditPositiveType(entry.type);
+                    const sign = isPositive
+                      ? "+"
+                      : entry.type === "FEE_RESERVE"
+                      ? ""
+                      : "−";
+
+                    return (
+                      <tr
+                        key={entry.id}
+                        className="border-t border-slate-100 dark:border-slate-800"
+                      >
+                        <td className="py-1 pr-3 whitespace-nowrap">
+                          {formatDateTime(entry.createdAt)}
+                        </td>
+                        <td className="py-1 pr-3 whitespace-nowrap">
+                          {getLedgerTypeLabel(entry.type)}
+                        </td>
+                        <td className="py-1 pr-3 whitespace-nowrap">
+                          {entry.orderId ? `#${entry.orderId.slice(-6)}` : "—"}
+                        </td>
+                        <td className="py-1 pr-3 text-right whitespace-nowrap">
+                          <span
+                            className={[
+                              "font-medium",
+                              isPositive
+                                ? "text-emerald-700 dark:text-emerald-300"
+                                : entry.type === "FEE_RESERVE"
+                                ? "text-slate-600 dark:text-slate-300"
+                                : "text-red-600 dark:text-red-400",
+                            ].join(" ")}
+                          >
+                            {sign}
+                            {formatMoney(entry.amountCents)}
+                          </span>
+                        </td>
+                        <td className="py-1 pr-3 text-right whitespace-nowrap">
+                          {entry.balanceCents != null
+                            ? formatMoney(entry.balanceCents)
+                            : "—"}
+                        </td>
+                        <td className="py-1 pr-3 max-w-xs truncate">
+                          {entry.note || "—"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        {/* Manual order form */}
         <AddManualOrderClient products={products} />
-        {/* 🔴 Live watcher: polls + refreshes + plays sound when new order arrives */}
+
+        {/* Live watcher: polls + refreshes + plays sound when new order arrives */}
         <LiveOrdersWatcher initialLatestOrderId={latestOrderId} />
 
+        {/* Orders table */}
         <OwnerOrdersTable orders={mapped} />
       </div>
     </main>
