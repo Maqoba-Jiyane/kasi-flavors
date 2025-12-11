@@ -17,7 +17,7 @@ export async function getTenantEmailConfig(
     "kasiflavors@gmail.com"; // or some safe default domain
 
   const baseUrl =
-    process.env.APP_BASE_URL ?? "http://localhost:3000";
+    process.env.BASE_URL ?? "http://localhost:3000";
 
   return {
     tenantId,
