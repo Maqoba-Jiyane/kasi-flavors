@@ -3,6 +3,38 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser, assertRole } from "@/lib/auth";
 import type { LedgerEntry, LedgerType } from "@prisma/client";
 import Link from "next/link";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Billing & balance", // becomes "Billing & balance | Kasi Flavors" via root template
+  description:
+    "View your store’s current balance, recent billing activity, platform fees, and top-ups in the Kasi Flavors owner dashboard.",
+  alternates: {
+    canonical: "/owner/store/billing",
+  },
+  openGraph: {
+    type: "website",
+    title: "Billing & balance | Kasi Flavors",
+    description:
+      "Check your store balance, transaction history, and platform fee activity in the Kasi Flavors owner billing dashboard.",
+    url: "/owner/store/billing",
+  },
+  twitter: {
+    card: "summary",
+    title: "Billing & balance | Kasi Flavors",
+    description:
+      "Monitor your store balance and recent billing transactions in the Kasi Flavors owner dashboard.",
+  },
+  robots: {
+    index: false,
+    follow: false, // private, internal area
+    googleBot: {
+      index: false,
+      follow: false,
+      noimageindex: true,
+    },
+  },
+};
 
 function formatMoney(cents: number) {
   return `R ${(cents / 100).toFixed(2)}`;

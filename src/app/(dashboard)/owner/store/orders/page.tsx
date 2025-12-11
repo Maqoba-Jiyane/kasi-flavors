@@ -12,6 +12,38 @@ import type {
 } from "@prisma/client";
 import { LiveOrdersWatcher } from "@/components/dashboard/LiveOrdersWatcher";
 import { AddManualOrderClient } from "@/components/dashboard/AddManualOrderClient";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Store orders", // becomes "Store orders | Kasi Flavors" via root template
+  description:
+    "Manage incoming orders, track statuses, see recent transactions, and create manual orders in your Kasi Flavors store dashboard.",
+  alternates: {
+    canonical: "/owner/store/orders",
+  },
+  openGraph: {
+    type: "website",
+    title: "Store orders | Kasi Flavors",
+    description:
+      "View and manage all orders, statuses, balances, and recent billing activity for your Kasi Flavors store.",
+    url: "/owner/store/orders",
+  },
+  twitter: {
+    card: "summary",
+    title: "Store orders | Kasi Flavors",
+    description:
+      "Track and manage store orders from your Kasi Flavors owner dashboard.",
+  },
+  robots: {
+    index: false,
+    follow: false, // private owner view, keep crawlers out
+    googleBot: {
+      index: false,
+      follow: false,
+      noimageindex: true,
+    },
+  },
+};
 
 type SortOption = "time_desc" | "time_asc" | "status";
 type RangeOption = "7d" | "30d" | "all";
@@ -225,7 +257,7 @@ export default async function OwnerOrdersPage({
   const isNegativeBalance = currentBalance < 0;
 
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-6 dark:bg-slate-950">
+    <main className="min-h-screen bg-slate-50 py-6 dark:bg-slate-950">
       <div className="mx-auto max-w-5xl space-y-4">
         {/* Header + Balance card */}
         <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -355,7 +387,6 @@ export default async function OwnerOrdersPage({
           </div>
         </header>
 
-        {/* 🔹 NEW: Recent transactions panel */}
         <section className="rounded-xl border border-slate-200 bg-white p-4 text-xs shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
@@ -367,50 +398,45 @@ export default async function OwnerOrdersPage({
           </div>
 
           {ledgerEntries.length === 0 ? (
-            <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
               No ledger activity yet. When you complete orders, pay fees, or top
               up, entries will show here.
             </p>
           ) : (
-            <div className="mt-3 overflow-x-auto">
-              <table className="min-w-full text-left text-[11px] text-slate-700 dark:text-slate-200">
-                <thead className="border-b border-slate-100 text-[10px] uppercase tracking-wide text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                  <tr>
-                    <th className="py-1 pr-3">Date</th>
-                    <th className="py-1 pr-3">Type</th>
-                    <th className="py-1 pr-3">Order</th>
-                    <th className="py-1 pr-3 text-right">Amount</th>
-                    <th className="py-1 pr-3 text-right">Balance</th>
-                    <th className="py-1 pr-3">Note</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {ledgerEntries.map((entry) => {
-                    const isPositive = isCreditPositiveType(entry.type);
-                    const sign = isPositive
-                      ? "+"
-                      : entry.type === "FEE_RESERVE"
-                      ? ""
-                      : "−";
+            <>
+              {/* Mobile list */}
+              <div className="mt-3 space-y-2 md:hidden">
+                {ledgerEntries.map((entry) => {
+                  const isPositive = isCreditPositiveType(entry.type);
+                  const sign = isPositive
+                    ? "+"
+                    : entry.type === "FEE_RESERVE"
+                    ? ""
+                    : "−";
 
-                    return (
-                      <tr
-                        key={entry.id}
-                        className="border-t border-slate-100 dark:border-slate-800"
-                      >
-                        <td className="py-1 pr-3 whitespace-nowrap">
-                          {formatDateTime(entry.createdAt)}
-                        </td>
-                        <td className="py-1 pr-3 whitespace-nowrap">
-                          {getLedgerTypeLabel(entry.type)}
-                        </td>
-                        <td className="py-1 pr-3 whitespace-nowrap">
-                          {entry.orderId ? `#${entry.orderId.slice(-6)}` : "—"}
-                        </td>
-                        <td className="py-1 pr-3 text-right whitespace-nowrap">
-                          <span
+                  return (
+                    <article
+                      key={entry.id}
+                      className="rounded-lg border border-slate-100 bg-white p-3 text-xs shadow-sm dark:border-slate-800 dark:bg-slate-900"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                            {getLedgerTypeLabel(entry.type)}
+                          </div>
+                          <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                            {formatDateTime(entry.createdAt)}{" "}
+                            {entry.orderId && (
+                              <span className="ml-1 text-slate-400 dark:text-slate-500">
+                                · #{entry.orderId.slice(-6)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div
                             className={[
-                              "font-medium",
+                              "text-sm font-semibold",
                               isPositive
                                 ? "text-emerald-700 dark:text-emerald-300"
                                 : entry.type === "FEE_RESERVE"
@@ -420,22 +446,118 @@ export default async function OwnerOrdersPage({
                           >
                             {sign}
                             {formatMoney(entry.amountCents)}
-                          </span>
-                        </td>
-                        <td className="py-1 pr-3 text-right whitespace-nowrap">
-                          {entry.balanceCents != null
-                            ? formatMoney(entry.balanceCents)
-                            : "—"}
-                        </td>
-                        <td className="py-1 pr-3 max-w-xs truncate">
-                          {entry.note || "—"}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                          </div>
+                          <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                            Balance:{" "}
+                            {entry.balanceCents != null
+                              ? formatMoney(entry.balanceCents)
+                              : "—"}
+                          </div>
+                        </div>
+                      </div>
+
+                      {entry.note && (
+                        <p className="mt-2 line-clamp-2 text-[11px] text-slate-600 dark:text-slate-300">
+                          {entry.note}
+                        </p>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+
+              {/* Desktop table */}
+              <div className="mt-3 hidden overflow-x-auto md:block">
+                <table className="min-w-full text-left text-[11px] text-slate-700 dark:text-slate-200">
+                  <section className="rounded-xl border border-slate-200 bg-white p-4 text-xs shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                    <div className="flex items-center justify-between gap-2">
+                      <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+                        Recent transactions
+                      </h2>
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Showing last {ledgerEntries.length} entries
+                      </span>
+                    </div>
+
+                    {ledgerEntries.length === 0 ? (
+                      <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                        No ledger activity yet. When you complete orders, pay
+                        fees, or top up, entries will show here.
+                      </p>
+                    ) : (
+                      <div className="mt-3 overflow-x-auto">
+                        <table className="min-w-full text-left text-[11px] text-slate-700 dark:text-slate-200">
+                          <thead className="border-b border-slate-100 text-[10px] uppercase tracking-wide text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                            <tr>
+                              <th className="py-1 pr-3">Date</th>
+                              <th className="py-1 pr-3">Type</th>
+                              <th className="py-1 pr-3">Order</th>
+                              <th className="py-1 pr-3 text-right">Amount</th>
+                              <th className="py-1 pr-3 text-right">Balance</th>
+                              <th className="py-1 pr-3">Note</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {ledgerEntries.map((entry) => {
+                              const isPositive = isCreditPositiveType(
+                                entry.type
+                              );
+                              const sign = isPositive
+                                ? "+"
+                                : entry.type === "FEE_RESERVE"
+                                ? ""
+                                : "−";
+
+                              return (
+                                <tr
+                                  key={entry.id}
+                                  className="border-t border-slate-100 dark:border-slate-800"
+                                >
+                                  <td className="py-1 pr-3 whitespace-nowrap">
+                                    {formatDateTime(entry.createdAt)}
+                                  </td>
+                                  <td className="py-1 pr-3 whitespace-nowrap">
+                                    {getLedgerTypeLabel(entry.type)}
+                                  </td>
+                                  <td className="py-1 pr-3 whitespace-nowrap">
+                                    {entry.orderId
+                                      ? `#${entry.orderId.slice(-6)}`
+                                      : "—"}
+                                  </td>
+                                  <td className="py-1 pr-3 text-right whitespace-nowrap">
+                                    <span
+                                      className={[
+                                        "font-medium",
+                                        isPositive
+                                          ? "text-emerald-700 dark:text-emerald-300"
+                                          : entry.type === "FEE_RESERVE"
+                                          ? "text-slate-600 dark:text-slate-300"
+                                          : "text-red-600 dark:text-red-400",
+                                      ].join(" ")}
+                                    >
+                                      {sign}
+                                      {formatMoney(entry.amountCents)}
+                                    </span>
+                                  </td>
+                                  <td className="py-1 pr-3 text-right whitespace-nowrap">
+                                    {entry.balanceCents != null
+                                      ? formatMoney(entry.balanceCents)
+                                      : "—"}
+                                  </td>
+                                  <td className="py-1 pr-3 max-w-xs truncate">
+                                    {entry.note || "—"}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </section>
+                </table>
+              </div>
+            </>
           )}
         </section>
 

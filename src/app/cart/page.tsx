@@ -14,6 +14,39 @@ import {
 } from "./actions";
 import { getCurrentUserMinimal } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Your cart", // becomes "Your cart | Kasi Flavors" via root template
+  description:
+    "Review your kasi food order, update quantities, and get ready to checkout with Kasi Flavors.",
+  alternates: {
+    canonical: "/cart",
+  },
+  openGraph: {
+    // still decent if someone shares the URL, but not SEO-focused
+    type: "website",
+    title: "Your cart | Kasi Flavors",
+    description:
+      "Review the items in your Kasi Flavors cart before completing your order.",
+    url: "/cart",
+  },
+  twitter: {
+    card: "summary",
+    title: "Your cart | Kasi Flavors",
+    description:
+      "Check your kasi food order and get ready to checkout with Kasi Flavors.",
+  },
+  robots: {
+    index: false,
+    follow: false, // keep bots off this internal step
+    googleBot: {
+      index: false,
+      follow: false,
+      noimageindex: true,
+    },
+  },
+};
 
 export default async function CartPage() {
   const user = await getCurrentUserMinimal();

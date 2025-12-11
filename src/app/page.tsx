@@ -2,6 +2,42 @@ import { prisma } from "@/lib/prisma";
 import { StoreCard } from "@/components/StoreCard";
 import { getCurrentUserMinimal } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Order kasi food online", // becomes "Order kasi food online | Kasi Flavors" via root template
+  description:
+    "Discover local kasi spots near you. Order kota, bunny chow, shisanyama and more for collection or delivery from your favourite township kitchens.",
+  alternates: {
+    canonical: "/", // home canonical
+  },
+  openGraph: {
+    type: "website",
+    title: "Order kasi food online | Kasi Flavors",
+    description:
+      "Browse kasi restaurants by area and city. Order kota, bunny chow, shisanyama and more for collection or delivery in your neighbourhood.",
+    url: "/",
+    images: [
+      {
+        url: "/og-image-home.png", // optional: use a home-specific hero, else fallback to the global /og-image.png
+        width: 1200,
+        height: 630,
+        alt: "Kasi Flavors home – browse kasi spots and order online",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Order kasi food online | Kasi Flavors",
+    description:
+      "Find nearby kasi spots and order kota, bunny chow, shisanyama and more for quick collection or delivery.",
+    images: ["/og-image-home.png"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
+};
 
 export default async function HomePage() {
 

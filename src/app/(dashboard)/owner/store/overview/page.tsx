@@ -3,6 +3,38 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser, assertRole } from "@/lib/auth";
 import type { OrderStatus } from "@prisma/client";
 import Link from "next/link";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Store overview", // becomes "Store overview | Kasi Flavors" via root template
+  description:
+    "See a summary of your store’s balance, active orders, sales, and top items in the Kasi Flavors owner dashboard.",
+  alternates: {
+    canonical: "/owner/store/overview",
+  },
+  openGraph: {
+    type: "website",
+    title: "Store overview | Kasi Flavors",
+    description:
+      "Review your Kasi Flavors store’s key metrics including balance, order statuses, sales over the last 7 days, and top-selling items.",
+    url: "/owner/store/overview",
+  },
+  twitter: {
+    card: "summary",
+    title: "Store overview | Kasi Flavors",
+    description:
+      "Quickly see your store’s balance, orders, and top items in the Kasi Flavors owner overview dashboard.",
+  },
+  robots: {
+    index: false,
+    follow: false, // private owner view; don’t expose in search
+    googleBot: {
+      index: false,
+      follow: false,
+      noimageindex: true,
+    },
+  },
+};
 
 const ACTIVE_STATUSES: OrderStatus[] = [
   "PENDING",

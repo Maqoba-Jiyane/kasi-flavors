@@ -2,6 +2,52 @@
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import type { Metadata } from "next";
+
+type OrderPageRouteParams = {
+  orderId: string;
+};
+
+export async function generateMetadata(
+  { params }: { params: Promise<OrderPageRouteParams> }
+): Promise<Metadata> {
+  const { orderId } = await params;
+  const shortId = orderId.slice(-6);
+
+  const title = `Order #${shortId}`;
+  const urlPath = `/orders/${orderId}`;
+
+  return {
+    title, // becomes "Order #XXXXXX | Kasi Flavors" via root template
+    description:
+      "View the status, pickup or delivery code, and details for this Kasi Flavors order.",
+    alternates: {
+      canonical: urlPath,
+    },
+    openGraph: {
+      type: "website",
+      title: `${title} | Kasi Flavors`,
+      description:
+        "Track the status and view details for your Kasi Flavors order.",
+      url: urlPath,
+    },
+    twitter: {
+      card: "summary",
+      title: `${title} | Kasi Flavors`,
+      description:
+        "Track the status and see details for your Kasi Flavors order.",
+    },
+    robots: {
+      index: false,
+      follow: false,
+      googleBot: {
+        index: false,
+        follow: false,
+        noimageindex: true,
+      },
+    },
+  };
+}
 
 type OrderStatus =
   | "PENDING"

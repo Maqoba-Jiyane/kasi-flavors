@@ -3,6 +3,38 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser, assertRole } from "@/lib/auth";
 import type { Order, OrderItem } from "@prisma/client";
 import Link from "next/link";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Store analytics", // becomes "Store analytics | Kasi Flavors" via root template
+  description:
+    "View your store’s revenue, order volume, prep times, and top products on the Kasi Flavors analytics dashboard.",
+  alternates: {
+    canonical: "/owner/store/analytics",
+  },
+  openGraph: {
+    type: "website",
+    title: "Store analytics | Kasi Flavors",
+    description:
+      "Track revenue, order trends, status breakdowns, and top products for your Kasi Flavors store.",
+    url: "/owner/store/analytics",
+  },
+  twitter: {
+    card: "summary",
+    title: "Store analytics | Kasi Flavors",
+    description:
+      "Analyze orders, revenue, prep times, and product performance for your Kasi Flavors store.",
+  },
+  robots: {
+    index: false,
+    follow: false, // internal owner dashboard, not for crawling
+    googleBot: {
+      index: false,
+      follow: false,
+      noimageindex: true,
+    },
+  },
+};
 
 type RangeOption = "7d" | "30d" | "all";
 

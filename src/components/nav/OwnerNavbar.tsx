@@ -1,5 +1,7 @@
 "use client";
 
+import { SignedIn, SignedOut, SignInButton, SignOutButton, SignUpButton } from "@clerk/nextjs";
+import { LogIn, User } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
@@ -137,11 +139,32 @@ export default function OwnerNavbar({
                 </button>
               </div>
 
-              {/* <div className="px-3 mt-2">
-                <button onClick={() => onSignOut?.()} className="w-full rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white">
-                  Sign out
-                </button>
-              </div> */}
+              <div className="mt-2 px-3 w-full flex flex-col justify-center items-center">
+                <SignedIn>
+                  <SignOutButton>
+                    <div className="flex justify-center w-full rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700">
+                      {/* <LogOut className="h-4 w-4" /> */}
+                      Sign Out
+                    </div>
+                  </SignOutButton>
+                </SignedIn>
+
+                <SignedOut>
+                  <SignInButton>
+                    <div className="flex cursor-pointer items-center gap-2">
+                      <LogIn className="h-4 w-4" />
+                      <span>Sign In</span>
+                    </div>
+                  </SignInButton>
+
+                  <SignUpButton>
+                    <div className="flex cursor-pointer items-center gap-2">
+                      <User className="h-4 w-4" />
+                      <span>Sign Up</span>
+                    </div>
+                  </SignUpButton>
+                </SignedOut>
+              </div>
             </div>
           </div>
         )}

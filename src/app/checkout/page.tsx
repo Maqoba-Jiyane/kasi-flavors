@@ -4,6 +4,38 @@ import { getCurrentUserMinimal } from "@/lib/auth";
 import { getCartForUser, calculateCartTotals, formatPrice } from "@/lib/cart";
 import { CheckoutForm } from "@/components/CheckoutForm";
 import { redirect } from "next/navigation";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Checkout", // becomes "Checkout | Kasi Flavors" via root template
+  description:
+    "Confirm your order details and complete checkout for your kasi food from Kasi Flavors.",
+  alternates: {
+    canonical: "/checkout",
+  },
+  openGraph: {
+    type: "website",
+    title: "Checkout | Kasi Flavors",
+    description:
+      "Review your kasi food order and securely complete checkout with Kasi Flavors.",
+    url: "/checkout",
+  },
+  twitter: {
+    card: "summary",
+    title: "Checkout | Kasi Flavors",
+    description:
+      "Confirm your kasi food order details and complete checkout with Kasi Flavors.",
+  },
+  robots: {
+    index: false,
+    follow: false, // internal, auth-only step
+    googleBot: {
+      index: false,
+      follow: false,
+      noimageindex: true,
+    },
+  },
+};
 
 interface CheckoutPageProps {
   searchParams?: Promise<{

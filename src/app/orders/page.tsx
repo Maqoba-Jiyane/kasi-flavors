@@ -4,6 +4,38 @@ import { getCurrentUser, assertRole } from "@/lib/auth";
 import Link from "next/link";
 import OrderActionsClient from "@/components/orders/OrderActionsClient";
 import type { Order,  } from "@prisma/client";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "My orders", // becomes "My orders | Kasi Flavors" via root template
+  description:
+    "View your active and past kasi food orders placed with your Kasi Flavors account.",
+  alternates: {
+    canonical: "/orders",
+  },
+  openGraph: {
+    type: "website",
+    title: "My orders | Kasi Flavors",
+    description:
+      "Track active orders and review your past kasi food orders on Kasi Flavors.",
+    url: "/orders",
+  },
+  twitter: {
+    card: "summary",
+    title: "My orders | Kasi Flavors",
+    description:
+      "See your active and past kasi food orders linked to your Kasi Flavors account.",
+  },
+  robots: {
+    index: false,
+    follow: false, // internal/account area; no need for bots to follow
+    googleBot: {
+      index: false,
+      follow: false,
+      noimageindex: true,
+    },
+  },
+};
 
 type Row = {
   id: string;
