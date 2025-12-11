@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
+
 interface CartSummaryBarProps {
   itemCount: number;
   totalCents: number;
-  onCheckout: () => void;
+  onCheckout: () => void | Promise<void>;
 }
 
 function formatPrice(priceCents: number) {
@@ -15,7 +17,24 @@ export function CartSummaryBar({
   totalCents,
   onCheckout,
 }: CartSummaryBarProps) {
-  // if (itemCount === 0) return null;
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
+
+  const hasItems = itemCount > 0;
+
+  const handleCheckoutClick = async () => {
+    if (!hasItems || isCheckingOut) return;
+
+    try {
+      setIsCheckingOut(true);
+      // Support both sync and async onCheckout
+      await Promise.resolve(onCheckout());
+    } finally {
+      setIsCheckingOut(false);
+    }
+  };
+
+  // Option A: hide entirely when empty (most common pattern)
+  if (!hasItems) return null;
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-4 py-3 shadow-2xl shadow-slate-900/20 backdrop-blur sm:px-0 dark:border-slate-800 dark:bg-slate-900/95">
@@ -32,10 +51,26 @@ export function CartSummaryBar({
 
         <button
           type="button"
-          onClick={onCheckout}
-          className="inline-flex items-center justify-center rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-emerald-500/30 transition hover:bg-emerald-700"
+          onClick={handleCheckoutClick}
+          disabled={!hasItems || isCheckingOut}
+          aria-busy={isCheckingOut || undefined}
+          aria-disabled={!hasItems || isCheckingOut || undefined}
+          aria-label={
+            isCheckingOut
+              ? "Opening cart"
+              : "View cart and proceed to checkout"
+          }
+          className="inline-flex items-center justify-center gap-2 rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-emerald-500/30 transition-all duration-150 hover:-translate-y-[1px] hover:bg-emerald-700 hover:shadow-xl active:translate-y-[1px] active:shadow-md disabled:translate-y-0 disabled:bg-slate-300 disabled:shadow-none dark:disabled:bg-slate-700"
         >
-          View Cart →
+          {isCheckingOut && (
+            <span
+              className="inline-flex h-4 w-4 animate-spin rounded-full border-2 border-white/70 border-t-transparent"
+              aria-hidden="true"
+            />
+          )}
+          <span className={isCheckingOut ? "opacity-90" : undefined}>
+            {isCheckingOut ? "Opening cart…" : "View cart →"}
+          </span>
         </button>
       </div>
     </div>

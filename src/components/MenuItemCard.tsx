@@ -1,7 +1,7 @@
 "use client";
 
 import { addToCart } from "@/app/cart/actions";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export type MenuItem = {
   id: string;
@@ -23,17 +23,51 @@ function formatPrice(priceCents: number) {
 
 export function MenuItemCard({ item, onAdd }: MenuItemCardProps) {
   const [quantity, setQuantity] = useState<number>(1);
+  const [isAdding, setIsAdding] = useState(false);
+  const [justAdded, setJustAdded] = useState(false);
 
-  const handleAdd = async() => {
+  const successTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (successTimeoutRef.current) {
+        clearTimeout(successTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleAdd = async () => {
     if (!item.isAvailable) return;
-    await addToCart(item.id, quantity)
-    onAdd(item.id, quantity);
+    if (isAdding) return; // prevent double-clicks while request is in flight
+
+    try {
+      setIsAdding(true);
+      setJustAdded(false);
+
+      await addToCart(item.id, quantity);
+      onAdd(item.id, quantity);
+
+      setJustAdded(true);
+      successTimeoutRef.current = setTimeout(() => {
+        setJustAdded(false);
+      }, 1200);
+    } catch (err) {
+      if (process.env.NODE_ENV === "development") {
+        console.error("Failed to add item to cart", err);
+      }
+      // Optional: you can surface a toast here in the future
+    } finally {
+      setIsAdding(false);
+    }
   };
+
+  const canChangeQty = item.isAvailable && !isAdding;
+  const canClickAdd = item.isAvailable && !isAdding;
 
   return (
     <div className="flex gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm transition hover:border-emerald-200 hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
       {/* Image */}
-      {item.imageUrl ?
+      {item.imageUrl ? (
         <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-800">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -42,12 +76,11 @@ export function MenuItemCard({ item, onAdd }: MenuItemCardProps) {
             className="h-full w-full object-cover"
           />
         </div>
-        : (
-          <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-medium uppercase text-slate-400 dark:bg-slate-800">
-            No image
-          </div>
-        )
-      }
+      ) : (
+        <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-medium uppercase text-slate-400 dark:bg-slate-800">
+          No image
+        </div>
+      )}
 
       {/* Content */}
       <div className="flex flex-1 flex-col justify-between">
@@ -86,7 +119,8 @@ export function MenuItemCard({ item, onAdd }: MenuItemCardProps) {
                 type="button"
                 className="px-2 py-1 text-slate-500 hover:text-slate-900 disabled:opacity-30 dark:text-slate-300 dark:hover:text-slate-50"
                 onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                disabled={!item.isAvailable}
+                disabled={!canChangeQty}
+                aria-label="Decrease quantity"
               >
                 −
               </button>
@@ -97,7 +131,8 @@ export function MenuItemCard({ item, onAdd }: MenuItemCardProps) {
                 type="button"
                 className="px-2 py-1 text-slate-500 hover:text-slate-900 disabled:opacity-30 dark:text-slate-300 dark:hover:text-slate-50"
                 onClick={() => setQuantity((q) => q + 1)}
-                disabled={!item.isAvailable}
+                disabled={!canChangeQty}
+                aria-label="Increase quantity"
               >
                 +
               </button>
@@ -106,10 +141,34 @@ export function MenuItemCard({ item, onAdd }: MenuItemCardProps) {
             <button
               type="button"
               onClick={handleAdd}
-              disabled={!item.isAvailable}
-              className="inline-flex items-center justify-center rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 dark:disabled:bg-slate-700"
+              disabled={!canClickAdd}
+              aria-busy={isAdding || undefined}
+              aria-live="polite"
+              className="inline-flex items-center justify-center gap-1.5 rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700 active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-300 dark:disabled:bg-slate-700"
             >
-              Add
+              {isAdding && (
+                <span
+                  className="inline-flex h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/70 border-t-transparent"
+                  aria-hidden="true"
+                />
+              )}
+              {!isAdding && justAdded && (
+                <span
+                  className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-white/20 text-[9px]"
+                  aria-hidden="true"
+                >
+                  ✓
+                </span>
+              )}
+              <span className={isAdding ? "opacity-90" : undefined}>
+                {!item.isAvailable
+                  ? "Sold out"
+                  : isAdding
+                  ? "Adding…"
+                  : justAdded
+                  ? "Added"
+                  : "Add"}
+              </span>
             </button>
           </div>
         </div>
