@@ -2,6 +2,7 @@
 
 import { addToCart } from "@/app/cart/actions";
 import { useEffect, useRef, useState } from "react";
+import toast from "react-hot-toast";
 
 export type MenuItem = {
   id: string;
@@ -37,29 +38,34 @@ export function MenuItemCard({ item, onAdd }: MenuItemCardProps) {
   }, []);
 
   const handleAdd = async () => {
-    if (!item.isAvailable) return;
-    if (isAdding) return; // prevent double-clicks while request is in flight
-
+    if (!item.isAvailable || isAdding) return;
+  
+    setIsAdding(true);
+    setJustAdded(false);
+  
     try {
-      setIsAdding(true);
-      setJustAdded(false);
-
-      await addToCart(item.id, quantity);
+      const res = await addToCart(item.id, quantity);
+  
+      if (!res.success) {
+        toast.error(res.message);
+        return;
+      }
+      
+  
+      // Only update UI if server confirmed success
       onAdd(item.id, quantity);
-
+  
       setJustAdded(true);
-      successTimeoutRef.current = setTimeout(() => {
-        setJustAdded(false);
-      }, 1200);
+      successTimeoutRef.current = setTimeout(() => setJustAdded(false), 1200);
     } catch (err) {
       if (process.env.NODE_ENV === "development") {
         console.error("Failed to add item to cart", err);
       }
-      // Optional: you can surface a toast here in the future
+      toast.error("Something went wrong. Please try again.");
     } finally {
       setIsAdding(false);
     }
-  };
+  };  
 
   const canChangeQty = item.isAvailable && !isAdding;
   const canClickAdd = item.isAvailable && !isAdding;

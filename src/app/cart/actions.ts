@@ -14,42 +14,59 @@ function normalizeQuantity(raw: unknown): number {
 }
 
 const MAX_ITEMS_PER_CART = 5;
+type AddToCartResult =
+  | { success: true }
+  | {
+      success: false;
+      errorCode: "UNAUTHENTICATED" | "NOT_AVAILABLE" | "MAX_ITEMS_EXCEEDED";
+      message: string;
+    };
 
 // ADD TO CART (DB-backed)
-export async function addToCart(productId: string, quantity: number) {
-  if (!productId) return;
+export async function addToCart(
+  productId: string,
+  quantity: number
+): Promise<AddToCartResult> {
+  
+  if (!productId) {
+    return {
+      success: false,
+      errorCode: "NOT_AVAILABLE",
+      message: "Invalid product.",
+    };
+  }
 
   const user = await getCurrentUser();
   if (!user) {
-    // you can also redirect to sign-in here if you prefer
-    throw new Error("Not authenticated");
+    return {
+      success: false,
+      errorCode: "UNAUTHENTICATED",
+      message: "Please sign in to add items to your cart.",
+    };
   }
 
   const product = await prisma.product.findUnique({
     where: { id: productId },
-    select: {
-      id: true,
-      storeId: true,
-      isAvailable: true,
-    },
+    select: { id: true, storeId: true, isAvailable: true },
   });
 
   if (!product || !product.isAvailable) {
-    return;
+    return {
+      success: false,
+      errorCode: "NOT_AVAILABLE",
+      message: "This item is no longer available.",
+    };
   }
 
   const safeQty = normalizeQuantity(quantity);
 
-  await prisma.$transaction(async (tx) => {
-    // 1) Find or create a cart for this user
+  const result = await prisma.$transaction(async (tx) => {
     let cart = await tx.cart.findFirst({
       where: { customerId: user.id },
       include: {
         items: {
           include: {
-            product: {
-              select: { storeId: true },
-            },
+            product: { select: { storeId: true } },
           },
         },
       },
@@ -57,66 +74,54 @@ export async function addToCart(productId: string, quantity: number) {
 
     if (!cart) {
       cart = await tx.cart.create({
-        data: {
-          customerId: user.id,
-        },
+        data: { customerId: user.id },
         include: {
           items: {
             include: {
-              product: {
-                select: { storeId: true },
-              },
+              product: { select: { storeId: true } },
             },
           },
         },
       });
     }
 
-    // 2) Enforce single-store cart:
-    // If existing cart items belong to a different store, wipe cart items.
     const existingStoreId = cart.items[0]?.product.storeId ?? null;
     if (existingStoreId && existingStoreId !== product.storeId) {
-      await tx.cartItem.deleteMany({
-        where: { cartId: cart.id },
-      });
-      // refresh in-memory view
+      await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
       cart.items = [];
     }
 
-    // 3) Enforce max distinct items
     const distinctProductIds = new Set(cart.items.map((ci) => ci.productId));
     const isNewProduct = !distinctProductIds.has(product.id);
 
     if (isNewProduct && distinctProductIds.size >= MAX_ITEMS_PER_CART) {
-      // You can also choose to throw an error here and show a message in the UI.
-      // For now, we just ignore the add if they already have too many lines.
-      return;
+      return {
+        success: false as const,
+        errorCode: "MAX_ITEMS_EXCEEDED" as const,
+        message: "You’ve reached the maximum number of items in your cart.",
+      };
     }
 
-    // 4) Upsert the CartItem with an atomic increment
     await tx.cartItem.upsert({
       where: {
-        // requires @@unique([cartId, productId]) in schema
         cartId_productId: {
           cartId: cart.id,
           productId: product.id,
         },
       },
-      update: {
-        quantity: {
-          increment: safeQty,
-        },
-      },
+      update: { quantity: { increment: safeQty } },
       create: {
         cartId: cart.id,
         productId: product.id,
         quantity: safeQty,
       },
     });
+
+    return { success: true as const };
   });
 
-  // Revalidate cart page UI
   revalidatePath("/cart");
+  return result;
 }
 
 // UPDATE QUANTITY
@@ -153,7 +158,10 @@ export async function updateCartItem(formData: FormData) {
       return;
     }
 
-    const clampedQty = Math.max(MIN_QTY_PER_ITEM, Math.min(MAX_QTY_PER_ITEM, safeQty));
+    const clampedQty = Math.max(
+      MIN_QTY_PER_ITEM,
+      Math.min(MAX_QTY_PER_ITEM, safeQty)
+    );
 
     await tx.cartItem.updateMany({
       where: {

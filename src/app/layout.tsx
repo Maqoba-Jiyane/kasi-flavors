@@ -6,6 +6,7 @@ import CustomerNavbar from "@/components/nav/CustomerNavbar";
 import AdminNavbar from "@/components/nav/AdminNavbar";
 import { getCartForUser, getEmptyCart } from "@/lib/cart";
 import { getCurrentUserMinimal } from "@/lib/auth";
+import { ToasterProvider } from "@/components/ui/ToasterProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -108,6 +109,7 @@ export default async function RootLayout({
           ) : (
             <CustomerNavbar cartCount={cartCount} userName={user?.name} />
           )}
+        <ToasterProvider />
           <main>{children}</main>
         </body>
       </html>

@@ -101,6 +101,17 @@ export default function OwnerNavbar({
               <Link href={`/owner/store/orders`} className="inline-flex items-center rounded-md px-3 py-1 text-sm font-medium text-slate-600 hover:bg-slate-50 dark:text-slate-300">
                 Orders
               </Link>
+
+              <div className="mt-2 px-3 w-full flex flex-col justify-center items-center">
+                <SignedIn>
+                  <SignOutButton>
+                    <div className="flex justify-center w-full rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700">
+                      {/* <LogOut className="h-4 w-4" /> */}
+                      Sign Out
+                    </div>
+                  </SignOutButton>
+                </SignedIn>
+              </div>
             </div>
 
             <div className="flex items-center gap-2">
