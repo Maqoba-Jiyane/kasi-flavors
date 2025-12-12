@@ -73,7 +73,11 @@ function formatDateTime(d: Date) {
 
 function formatTime(d?: Date | null) {
   if (!d) return "—";
-  return d.toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleTimeString("en-ZA", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Africa/Johannesburg",
+  });
 }
 
 function StatusPill({ status }: { status: string }) {

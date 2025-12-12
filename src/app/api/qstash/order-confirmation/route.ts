@@ -38,7 +38,7 @@ export async function POST(req: Request) {
     const emailRecord = await prisma.email.create({
       data: {
         type: "ORDER_CONFIRMATION",
-        to: order.customer.email,
+        to: order.customerEmail || order.customer.email,
         subject: "", // will be filled after build
         status: "PENDING",
         orderId: order.id,
@@ -49,7 +49,7 @@ export async function POST(req: Request) {
 
     const built = buildOrderConfirmationEmail({
       tenantConfig,
-      to: order.customer.email,
+      to: order.customerEmail || order.customer.email,
       customerName: order.customer.name ?? "",
       storeName: order.store.name,
       orderId: order.id,

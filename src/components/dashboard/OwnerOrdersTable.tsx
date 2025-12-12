@@ -51,6 +51,7 @@ function formatTime(d: Date) {
   return d.toLocaleTimeString("en-ZA", {
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: "Africa/Johannesburg",
   });
 }
 
