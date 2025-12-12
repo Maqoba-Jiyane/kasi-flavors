@@ -70,7 +70,7 @@ model Store {
   city               String
   area               String
   avgPrepTimeMinutes Int        @default(25)
-  creditCents        Int      @default(100000)
+  creditCents        Int      @default(5000)
   isOpen             Boolean    @default(true)
 
   // Owner lives here (FK on Store side)
