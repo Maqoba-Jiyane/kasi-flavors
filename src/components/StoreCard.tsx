@@ -1,4 +1,4 @@
-'use client'
+'use client';
 
 import Link from "next/link";
 
@@ -6,8 +6,8 @@ export type Store = {
   id: string;
   name: string;
   slug: string;
-  area: string;             // e.g. "Soweto - Diepkloof"
-  city: string;             // e.g. "Johannesburg"
+  area: string;
+  city: string;
   description?: string | null;
   avgPrepTimeMinutes: number;
   isOpen: boolean;
@@ -18,20 +18,8 @@ interface StoreCardProps {
 }
 
 export function StoreCard({ store }: StoreCardProps) {
-  return (
-<Link
-  href={store.isOpen ? `/stores/${store.slug}` : "#"}
-  onClick={(e) => {
-    if (!store.isOpen) {
-      e.preventDefault();        // stop navigation
-      e.stopPropagation();       // prevent bubbling
-    }
-  }}
-  className={`group flex flex-col rounded-xl border border-slate-200 bg-white shadow-sm transition
-    ${store.isOpen ? "hover:-translate-y-1 hover:shadow-md" : "opacity-60 cursor-not-allowed"}
-    dark:border-slate-800 dark:bg-slate-900`}
->
-
+  const CardInner = (
+    <>
       {/* Top section */}
       <div className="flex-1 p-4">
         <div className="flex items-start justify-between gap-2">
@@ -39,7 +27,7 @@ export function StoreCard({ store }: StoreCardProps) {
             <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-50">
               {store.name}
             </h3>
-            <p className="mt-1 text-xs font-medium uppercase tracking-wide text-slate-500">
+            <p className="mt-1 text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
               {store.area} · {store.city}
             </p>
           </div>
@@ -66,15 +54,50 @@ export function StoreCard({ store }: StoreCardProps) {
       {/* Bottom strip */}
       <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50 px-4 py-3 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-300">
         <div className="flex items-center gap-2">
-          <span className="inline-flex h-6 items-center rounded-full bg-white px-2 text-[11px] font-medium uppercase tracking-wide text-slate-500 shadow-sm dark:bg-slate-950">
-            ~ {store.avgPrepTimeMinutes} min prep
-          </span>
-          {/* Placeholder: could later show delivery fee/eta */}
+          {Number.isFinite(store.avgPrepTimeMinutes) && store.avgPrepTimeMinutes > 0 && (
+            <span className="inline-flex h-6 items-center rounded-full bg-white px-2 text-[11px] font-medium uppercase tracking-wide text-slate-500 shadow-sm dark:bg-slate-950">
+              ~ {store.avgPrepTimeMinutes} min prep
+            </span>
+          )}
         </div>
-        <span className="text-xs font-semibold text-emerald-600 group-hover:text-emerald-700 dark:text-emerald-400">
-          View menu →
-        </span>
+
+        {store.isOpen ? (
+          <span className="text-xs font-semibold text-emerald-600 group-hover:text-emerald-700 dark:text-emerald-400">
+            View menu →
+          </span>
+        ) : (
+          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+            Closed — not taking orders
+          </span>
+        )}
       </div>
-    </Link>
+    </>
+  );
+
+  const baseClass =
+    "relative flex flex-col rounded-xl border border-slate-200 bg-white shadow-sm transition dark:border-slate-800 dark:bg-slate-900";
+
+  // OPEN: clickable, hover lift
+  if (store.isOpen) {
+    return (
+      <Link
+        href={`/stores/${store.slug}`}
+        className={`${baseClass} group hover:-translate-y-1 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 dark:focus:ring-emerald-400`}
+      >
+        {CardInner}
+      </Link>
+    );
+  }
+
+  // CLOSED: not a link (better UX + accessibility)
+  return (
+    <div
+      className={`${baseClass} opacity-70`}
+      aria-disabled="true"
+    >
+      {/* Optional: subtle overlay label */}
+      <div className="pointer-events-none absolute inset-0 rounded-xl ring-1 ring-transparent" />
+      {CardInner}
+    </div>
   );
 }

@@ -95,7 +95,7 @@ const ALLOWED_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   PENDING: ["ACCEPTED", "CANCELLED"],
   ACCEPTED: ["IN_PREPARATION", "CANCELLED"],
   IN_PREPARATION: ["READY_FOR_COLLECTION", "OUT_FOR_DELIVERY", "CANCELLED"],
-  READY_FOR_COLLECTION: ["COMPLETED", "CANCELLED"],
+  READY_FOR_COLLECTION: ["OUT_FOR_DELIVERY", "COMPLETED", "CANCELLED"],
   OUT_FOR_DELIVERY: ["COMPLETED", "CANCELLED"],
   COMPLETED: [], // final
   CANCELLED: [], // final
@@ -284,4 +284,99 @@ export async function confirmOrderWithCode(formData: FormData) {
   await chargePlatformFeeOnCompletion(orderId);
 
   revalidatePath("/owner/store/orders");
+}
+
+export async function completeDelivery(formData: FormData) {
+  const user = await getCurrentUser();
+  // Allow both STORE_OWNER and DELIVERY roles
+  assertRole(user, ["STORE_OWNER", "DELIVERY"]);
+
+  const orderId = (formData.get("orderId") as string | "").trim();
+  const rawCode = (formData.get("code") as string | "").trim();
+
+  if (!orderId || !rawCode) {
+    return {
+      success: false,
+      error: "Missing order ID or delivery code",
+    };
+  }
+
+  // For couriers, check if they're assigned to this store
+  let storeId: string | null = null;
+  if (user.role === "DELIVERY") {
+    const courier = await prisma.courier.findUnique({
+      where: { userId: user.id },
+      select: { storeId: true, isActive: true },
+    });
+    if (!courier || !courier.isActive) {
+      return {
+        success: false,
+        error: "Courier not found or inactive",
+      };
+    }
+    storeId = courier.storeId;
+  } else {
+    // For store owners
+    const store = await prisma.store.findUnique({
+      where: { ownerId: user.id },
+      select: { id: true },
+    });
+    if (!store) {
+      return {
+        success: false,
+        error: "Store not found",
+      };
+    }
+    storeId = store.id;
+  }
+
+  const order = await prisma.order.findFirst({
+    where: {
+      id: orderId,
+      storeId: storeId,
+      fulfilmentType: "DELIVERY", // Only delivery orders
+    },
+  });
+
+  if (!order) {
+    return {
+      success: false,
+      error: "Order not found",
+    };
+  }
+
+  // Only allow completion when order is out for delivery
+  if (order.status !== "OUT_FOR_DELIVERY") {
+    return {
+      success: false,
+      error: "Order must be out for delivery to complete",
+    };
+  }
+
+  const code = rawCode;
+  if (order.pickupCode !== code) {
+    return {
+      success: false,
+      error: "Incorrect delivery code",
+    };
+  }
+
+  await prisma.order.update({
+    where: { id: orderId },
+    data: {
+      status: "COMPLETED",
+      completedAt: new Date(),
+    },
+  });
+
+  // Charge platform fee for this completed order
+  await chargePlatformFeeOnCompletion(orderId);
+
+  revalidatePath("/delivery");
+  revalidatePath("/owner/store/orders");
+
+  return {
+    success: true,
+    error: "Delivery completed successfully",
+  };
 }

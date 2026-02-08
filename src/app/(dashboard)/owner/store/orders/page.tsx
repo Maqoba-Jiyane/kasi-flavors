@@ -3,24 +3,16 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser, assertRole } from "@/lib/auth";
 import { OwnerOrdersTable } from "@/components/dashboard/OwnerOrdersTable";
 import Link from "next/link";
-import type {
-  Order,
-  OrderItem,
-  Prisma,
-  LedgerEntry,
-  LedgerType,
-} from "@prisma/client";
+import type { Order, OrderItem, Prisma, LedgerEntry, LedgerType } from "@prisma/client";
 import { LiveOrdersWatcher } from "@/components/dashboard/LiveOrdersWatcher";
 import { AddManualOrderClient } from "@/components/dashboard/AddManualOrderClient";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Store orders", // becomes "Store orders | Kasi Flavors" via root template
+  title: "Store orders",
   description:
     "Manage incoming orders, track statuses, see recent transactions, and create manual orders in your Kasi Flavors store dashboard.",
-  alternates: {
-    canonical: "/owner/store/orders",
-  },
+  alternates: { canonical: "/owner/store/orders" },
   openGraph: {
     type: "website",
     title: "Store orders | Kasi Flavors",
@@ -31,17 +23,12 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary",
     title: "Store orders | Kasi Flavors",
-    description:
-      "Track and manage store orders from your Kasi Flavors owner dashboard.",
+    description: "Track and manage store orders from your Kasi Flavors owner dashboard.",
   },
   robots: {
     index: false,
-    follow: false, // private owner view, keep crawlers out
-    googleBot: {
-      index: false,
-      follow: false,
-      noimageindex: true,
-    },
+    follow: false,
+    googleBot: { index: false, follow: false, noimageindex: true },
   },
 };
 
@@ -53,7 +40,6 @@ interface OwnerOrdersPageProps {
   searchParams?: Promise<{ sort?: string; range?: string; view?: string }>;
 }
 
-// Custom status order matching kitchen flow
 const STATUS_ORDER: Record<Order["status"], number> = {
   PENDING: 1,
   ACCEPTED: 2,
@@ -77,10 +63,7 @@ const COMPLETED_STATUSES: Order["status"][] = ["COMPLETED", "CANCELLED"];
 function sortByStatusThenTime(a: Order, b: Order) {
   const sa = STATUS_ORDER[a.status];
   const sb = STATUS_ORDER[b.status];
-
   if (sa !== sb) return sa - sb;
-
-  // Within the same status: newest first
   return b.createdAt.getTime() - a.createdAt.getTime();
 }
 
@@ -109,7 +92,6 @@ function formatDateTime(d: Date) {
   });
 }
 
-// Simple mapping for ledger type labels + signs
 function getLedgerTypeLabel(type: LedgerType) {
   switch (type) {
     case "TOPUP":
@@ -133,22 +115,15 @@ function isCreditPositiveType(type: LedgerType) {
   return type === "TOPUP" || type === "REFUND";
 }
 
-export default async function OwnerOrdersPage({
-  searchParams,
-}: OwnerOrdersPageProps) {
+export default async function OwnerOrdersPage({ searchParams }: OwnerOrdersPageProps) {
   const user = await getCurrentUser();
   assertRole(user, ["STORE_OWNER"]);
 
   const store = await prisma.store.findUnique({
     where: { ownerId: user.id },
-    select: {
-      id: true,
-      name: true,
-      creditCents: true,
-    },
+    select: { id: true, name: true, creditCents: true },
   });
 
-  // Handle "no store" gracefully instead of throwing
   if (!store) {
     return (
       <main className="min-h-screen bg-slate-50 px-4 py-6 dark:bg-slate-950">
@@ -157,49 +132,46 @@ export default async function OwnerOrdersPage({
             No store linked to this account
           </h1>
           <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-            This owner account does not have a store configured yet. Please
-            contact support or complete your store setup.
+            This owner account does not have a store configured yet. Please contact support or complete your store setup.
           </p>
         </div>
       </main>
     );
   }
 
-  // 🔹 NEW: Load recent ledger entries for this store
+  // ✅ Correct search params parsing
+  const sp = (await searchParams) ?? {};
+  const sortParam: SortOption =
+    sp.sort === "time_asc" || sp.sort === "status" || sp.sort === "time_desc" ? (sp.sort as SortOption) : "time_desc";
+  const rangeParam: RangeOption =
+    sp.range === "7d" || sp.range === "30d" || sp.range === "all" ? (sp.range as RangeOption) : "30d";
+  const viewParam: ViewOption =
+    sp.view === "active" || sp.view === "completed" || sp.view === "all" ? (sp.view as ViewOption) : "all";
+
+  // Ledger entries (latest 3)
   const ledgerEntries: LedgerEntry[] = await prisma.ledgerEntry.findMany({
     where: { storeId: store.id },
     orderBy: { createdAt: "desc" },
-    take: 3, // show latest 10 in UI
+    take: 3,
   });
-
-  const sort = await searchParams;
-  const range = await searchParams;
-  const view = await searchParams;
-  // const { sort, range, view} = await searchParams
-
-  const sortParam = (await (sort as SortOption | undefined)) ?? "time_desc";
-  const rangeParam = (range as RangeOption | undefined) ?? "30d";
-  const viewParam = (view as ViewOption | undefined) ?? "all";
 
   const now = new Date();
   const rangeStart = getRangeStart(rangeParam, now);
 
-  // Typed where clause
   const where: Prisma.OrderWhereInput = {
     storeId: store.id,
     ...(rangeStart && { createdAt: { gte: rangeStart } }),
   };
 
-  const prismaOrderBy: Prisma.OrderOrderByWithRelationInput =
-    sortParam === "time_asc" ? { createdAt: "asc" } : { createdAt: "desc" };
+  // Only order in Prisma when not sorting by status (we do custom sort in memory)
+  const prismaOrderBy: Prisma.OrderOrderByWithRelationInput | undefined =
+    sortParam === "status" ? undefined : sortParam === "time_asc" ? { createdAt: "asc" } : { createdAt: "desc" };
 
   const ordersRaw = await prisma.order.findMany({
     where,
-    orderBy: prismaOrderBy,
-    include: {
-      items: true,
-    },
-    take: 200, // safety cap
+    ...(prismaOrderBy ? { orderBy: prismaOrderBy } : {}),
+    include: { items: true },
+    take: 200,
   });
 
   const products = await prisma.product.findMany({
@@ -209,23 +181,14 @@ export default async function OwnerOrdersPage({
   });
 
   let sorted: (Order & { items: OrderItem[] })[];
-
-  if (sortParam === "status") {
-    sorted = [...ordersRaw].sort(sortByStatusThenTime);
-  } else {
-    sorted = ordersRaw;
-  }
+  sorted = sortParam === "status" ? [...ordersRaw].sort(sortByStatusThenTime) : ordersRaw;
 
   const latestOrderId = sorted.length > 0 ? sorted[0].id : null;
 
   // Filter by view
   let filtered = sorted;
-
-  if (viewParam === "active") {
-    filtered = sorted.filter((o) => ACTIVE_STATUSES.includes(o.status));
-  } else if (viewParam === "completed") {
-    filtered = sorted.filter((o) => COMPLETED_STATUSES.includes(o.status));
-  }
+  if (viewParam === "active") filtered = sorted.filter((o) => ACTIVE_STATUSES.includes(o.status));
+  if (viewParam === "completed") filtered = sorted.filter((o) => COMPLETED_STATUSES.includes(o.status));
 
   const mapped = filtered.map((o) => ({
     id: o.id,
@@ -246,43 +209,30 @@ export default async function OwnerOrdersPage({
     })),
   }));
 
-  const rangeLabel =
-    rangeParam === "7d"
-      ? "Last 7 days"
-      : rangeParam === "30d"
-      ? "Last 30 days"
-      : "All time";
+  const rangeLabel = rangeParam === "7d" ? "Last 7 days" : rangeParam === "30d" ? "Last 30 days" : "All time";
 
   const currentBalance = store.creditCents ?? 0;
   const isNegativeBalance = currentBalance < 0;
 
   return (
     <main className="min-h-screen bg-slate-50 py-6 dark:bg-slate-950">
-      <div className="mx-auto max-w-5xl space-y-4">
-        {/* Header + Balance card */}
+      <div className="mx-auto max-w-5xl space-y-4 px-4 sm:px-6 lg:px-8">
+        {/* Header + Balance */}
         <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex flex-col gap-2">
             <div>
-              <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-50">
-                Orders
-              </h1>
+              <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-50">Orders</h1>
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-300">
                 {rangeLabel} for{" "}
-                <span className="font-medium text-slate-800 dark:text-slate-100">
-                  {store.name}
-                </span>
-                .
+                <span className="font-medium text-slate-800 dark:text-slate-100">{store.name}</span>.
               </p>
             </div>
 
-            {/* 🔹 NEW: Store balance card */}
-            <div className="mt-2 inline-flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              {/* ...inside your component... */}
+            <div className="inline-flex items-start gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs shadow-sm dark:border-slate-800 dark:bg-slate-900">
               <div>
                 <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
                   Store balance
                 </p>
-
                 <p
                   className={[
                     "mt-0.5 text-base font-semibold",
@@ -293,7 +243,6 @@ export default async function OwnerOrdersPage({
                 >
                   {formatMoney(currentBalance)}
                 </p>
-
                 <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
                   {isNegativeBalance
                     ? "Your balance is negative. You’ll need to top up before opening your store."
@@ -314,93 +263,61 @@ export default async function OwnerOrdersPage({
             </div>
           </div>
 
-          {/* Controls: Sort + Range + View */}
+          {/* Controls */}
           <div className="flex flex-wrap items-center gap-3 text-[11px]">
-            {/* Sort */}
             <div className="flex items-center gap-2">
               <span className="text-slate-500 dark:text-slate-400">Sort:</span>
-              <FilterChip
-                href={`/owner/store/orders?sort=time_desc&range=${rangeParam}&view=${viewParam}`}
-                active={sortParam === "time_desc"}
-              >
+              <FilterChip href={`/owner/store/orders?sort=time_desc&range=${rangeParam}&view=${viewParam}`} active={sortParam === "time_desc"}>
                 Newest
               </FilterChip>
-              <FilterChip
-                href={`/owner/store/orders?sort=time_asc&range=${rangeParam}&view=${viewParam}`}
-                active={sortParam === "time_asc"}
-              >
+              <FilterChip href={`/owner/store/orders?sort=time_asc&range=${rangeParam}&view=${viewParam}`} active={sortParam === "time_asc"}>
                 Oldest
               </FilterChip>
-              <FilterChip
-                href={`/owner/store/orders?sort=status&range=${rangeParam}&view=${viewParam}`}
-                active={sortParam === "status"}
-              >
+              <FilterChip href={`/owner/store/orders?sort=status&range=${rangeParam}&view=${viewParam}`} active={sortParam === "status"}>
                 Status
               </FilterChip>
             </div>
 
-            {/* Range */}
             <div className="flex items-center gap-2">
               <span className="text-slate-500 dark:text-slate-400">Range:</span>
-              <FilterChip
-                href={`/owner/store/orders?sort=${sortParam}&range=7d&view=${viewParam}`}
-                active={rangeParam === "7d"}
-              >
+              <FilterChip href={`/owner/store/orders?sort=${sortParam}&range=7d&view=${viewParam}`} active={rangeParam === "7d"}>
                 7 days
               </FilterChip>
-              <FilterChip
-                href={`/owner/store/orders?sort=${sortParam}&range=30d&view=${viewParam}`}
-                active={rangeParam === "30d"}
-              >
+              <FilterChip href={`/owner/store/orders?sort=${sortParam}&range=30d&view=${viewParam}`} active={rangeParam === "30d"}>
                 30 days
               </FilterChip>
-              <FilterChip
-                href={`/owner/store/orders?sort=${sortParam}&range=all&view=${viewParam}`}
-                active={rangeParam === "all"}
-              >
+              <FilterChip href={`/owner/store/orders?sort=${sortParam}&range=all&view=${viewParam}`} active={rangeParam === "all"}>
                 All time
               </FilterChip>
             </div>
 
-            {/* View */}
             <div className="flex items-center gap-2">
               <span className="text-slate-500 dark:text-slate-400">View:</span>
-              <FilterChip
-                href={`/owner/store/orders?sort=${sortParam}&range=${rangeParam}&view=all`}
-                active={viewParam === "all"}
-              >
+              <FilterChip href={`/owner/store/orders?sort=${sortParam}&range=${rangeParam}&view=all`} active={viewParam === "all"}>
                 All
               </FilterChip>
-              <FilterChip
-                href={`/owner/store/orders?sort=${sortParam}&range=${rangeParam}&view=active`}
-                active={viewParam === "active"}
-              >
+              <FilterChip href={`/owner/store/orders?sort=${sortParam}&range=${rangeParam}&view=active`} active={viewParam === "active"}>
                 Active
               </FilterChip>
-              <FilterChip
-                href={`/owner/store/orders?sort=${sortParam}&range=${rangeParam}&view=completed`}
-                active={viewParam === "completed"}
-              >
+              <FilterChip href={`/owner/store/orders?sort=${sortParam}&range=${rangeParam}&view=completed`} active={viewParam === "completed"}>
                 Completed
               </FilterChip>
             </div>
           </div>
         </header>
 
+        {/* Recent transactions (single section, responsive inside) */}
         <section className="rounded-xl border border-slate-200 bg-white p-4 text-xs shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-              Recent transactions
-            </h2>
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Recent transactions</h2>
             <span className="text-[11px] text-slate-500 dark:text-slate-400">
               Showing last {ledgerEntries.length} entries
             </span>
           </div>
 
           {ledgerEntries.length === 0 ? (
-            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-              No ledger activity yet. When you complete orders, pay fees, or top
-              up, entries will show here.
+            <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+              No ledger activity yet. When you complete orders, pay fees, or top up, entries will show here.
             </p>
           ) : (
             <>
@@ -408,11 +325,7 @@ export default async function OwnerOrdersPage({
               <div className="mt-3 space-y-2 md:hidden">
                 {ledgerEntries.map((entry) => {
                   const isPositive = isCreditPositiveType(entry.type);
-                  const sign = isPositive
-                    ? "+"
-                    : entry.type === "FEE_RESERVE"
-                    ? ""
-                    : "−";
+                  const sign = isPositive ? "+" : entry.type === "FEE_RESERVE" ? "" : "−";
 
                   return (
                     <article
@@ -425,7 +338,7 @@ export default async function OwnerOrdersPage({
                             {getLedgerTypeLabel(entry.type)}
                           </div>
                           <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                            {formatDateTime(entry.createdAt)}{" "}
+                            {formatDateTime(entry.createdAt)}
                             {entry.orderId && (
                               <span className="ml-1 text-slate-400 dark:text-slate-500">
                                 · #{entry.orderId.slice(-6)}
@@ -433,6 +346,7 @@ export default async function OwnerOrdersPage({
                             )}
                           </div>
                         </div>
+
                         <div className="text-right">
                           <div
                             className={[
@@ -448,10 +362,7 @@ export default async function OwnerOrdersPage({
                             {formatMoney(entry.amountCents)}
                           </div>
                           <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                            Balance:{" "}
-                            {entry.balanceCents != null
-                              ? formatMoney(entry.balanceCents)
-                              : "—"}
+                            Balance: {entry.balanceCents != null ? formatMoney(entry.balanceCents) : "—"}
                           </div>
                         </div>
                       </div>
@@ -469,105 +380,59 @@ export default async function OwnerOrdersPage({
               {/* Desktop table */}
               <div className="mt-3 hidden overflow-x-auto md:block">
                 <table className="min-w-full text-left text-[11px] text-slate-700 dark:text-slate-200">
-                  <section className="rounded-xl border border-slate-200 bg-white p-4 text-xs shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                    <div className="flex items-center justify-between gap-2">
-                      <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                        Recent transactions
-                      </h2>
-                      <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                        Showing last {ledgerEntries.length} entries
-                      </span>
-                    </div>
+                  <thead className="border-b border-slate-100 text-[10px] uppercase tracking-wide text-slate-400 dark:border-slate-800 dark:text-slate-500">
+                    <tr>
+                      <th className="py-1 pr-3">Date</th>
+                      <th className="py-1 pr-3">Type</th>
+                      <th className="py-1 pr-3">Order</th>
+                      <th className="py-1 pr-3 text-right">Amount</th>
+                      <th className="py-1 pr-3 text-right">Balance</th>
+                      <th className="py-1 pr-3">Note</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ledgerEntries.map((entry) => {
+                      const isPositive = isCreditPositiveType(entry.type);
+                      const sign = isPositive ? "+" : entry.type === "FEE_RESERVE" ? "" : "−";
 
-                    {ledgerEntries.length === 0 ? (
-                      <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
-                        No ledger activity yet. When you complete orders, pay
-                        fees, or top up, entries will show here.
-                      </p>
-                    ) : (
-                      <div className="mt-3 overflow-x-auto">
-                        <table className="min-w-full text-left text-[11px] text-slate-700 dark:text-slate-200">
-                          <thead className="border-b border-slate-100 text-[10px] uppercase tracking-wide text-slate-400 dark:border-slate-800 dark:text-slate-500">
-                            <tr>
-                              <th className="py-1 pr-3">Date</th>
-                              <th className="py-1 pr-3">Type</th>
-                              <th className="py-1 pr-3">Order</th>
-                              <th className="py-1 pr-3 text-right">Amount</th>
-                              <th className="py-1 pr-3 text-right">Balance</th>
-                              <th className="py-1 pr-3">Note</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {ledgerEntries.map((entry) => {
-                              const isPositive = isCreditPositiveType(
-                                entry.type
-                              );
-                              const sign = isPositive
-                                ? "+"
-                                : entry.type === "FEE_RESERVE"
-                                ? ""
-                                : "−";
-
-                              return (
-                                <tr
-                                  key={entry.id}
-                                  className="border-t border-slate-100 dark:border-slate-800"
-                                >
-                                  <td className="py-1 pr-3 whitespace-nowrap">
-                                    {formatDateTime(entry.createdAt)}
-                                  </td>
-                                  <td className="py-1 pr-3 whitespace-nowrap">
-                                    {getLedgerTypeLabel(entry.type)}
-                                  </td>
-                                  <td className="py-1 pr-3 whitespace-nowrap">
-                                    {entry.orderId
-                                      ? `#${entry.orderId.slice(-6)}`
-                                      : "—"}
-                                  </td>
-                                  <td className="py-1 pr-3 text-right whitespace-nowrap">
-                                    <span
-                                      className={[
-                                        "font-medium",
-                                        isPositive
-                                          ? "text-emerald-700 dark:text-emerald-300"
-                                          : entry.type === "FEE_RESERVE"
-                                          ? "text-slate-600 dark:text-slate-300"
-                                          : "text-red-600 dark:text-red-400",
-                                      ].join(" ")}
-                                    >
-                                      {sign}
-                                      {formatMoney(entry.amountCents)}
-                                    </span>
-                                  </td>
-                                  <td className="py-1 pr-3 text-right whitespace-nowrap">
-                                    {entry.balanceCents != null
-                                      ? formatMoney(entry.balanceCents)
-                                      : "—"}
-                                  </td>
-                                  <td className="py-1 pr-3 max-w-xs truncate">
-                                    {entry.note || "—"}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </section>
+                      return (
+                        <tr key={entry.id} className="border-t border-slate-100 dark:border-slate-800">
+                          <td className="py-1 pr-3 whitespace-nowrap">{formatDateTime(entry.createdAt)}</td>
+                          <td className="py-1 pr-3 whitespace-nowrap">{getLedgerTypeLabel(entry.type)}</td>
+                          <td className="py-1 pr-3 whitespace-nowrap">
+                            {entry.orderId ? `#${entry.orderId.slice(-6)}` : "—"}
+                          </td>
+                          <td className="py-1 pr-3 text-right whitespace-nowrap">
+                            <span
+                              className={[
+                                "font-medium",
+                                isPositive
+                                  ? "text-emerald-700 dark:text-emerald-300"
+                                  : entry.type === "FEE_RESERVE"
+                                  ? "text-slate-600 dark:text-slate-300"
+                                  : "text-red-600 dark:text-red-400",
+                              ].join(" ")}
+                            >
+                              {sign}
+                              {formatMoney(entry.amountCents)}
+                            </span>
+                          </td>
+                          <td className="py-1 pr-3 text-right whitespace-nowrap">
+                            {entry.balanceCents != null ? formatMoney(entry.balanceCents) : "—"}
+                          </td>
+                          <td className="py-1 pr-3 max-w-xs truncate">{entry.note || "—"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
                 </table>
               </div>
             </>
           )}
         </section>
 
-        {/* Manual order form */}
         <AddManualOrderClient products={products} />
-
-        {/* Live watcher: polls + refreshes + plays sound when new order arrives */}
         <LiveOrdersWatcher initialLatestOrderId={latestOrderId} />
-
-        {/* Orders table */}
         <OwnerOrdersTable orders={mapped} />
       </div>
     </main>

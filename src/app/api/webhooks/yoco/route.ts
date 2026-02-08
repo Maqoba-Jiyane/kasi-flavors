@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     const signedBytes = Buffer.concat([prefix, rawBuf]);
 
     // 3) Build expected signature from Yoco webhook secret
-    const fullSecret = process.env.WEBHOOK_SECRET;
+    const fullSecret = process.env.YOCO_WEBHOOK_SECRET;
     if (!fullSecret || !fullSecret.startsWith("whsec_")) {
       console.error(
         "[Yoco webhook] Server misconfigured: WEBHOOK_SECRET missing or invalid",
@@ -87,6 +87,7 @@ export async function POST(req: NextRequest) {
           storeId?: string;
           ownerId?: string;
           type?: string;
+          orderId?: string;
         };
       };
     };
@@ -95,111 +96,186 @@ export async function POST(req: NextRequest) {
     const checkoutIdFromPayload = body.payload?.id ?? null;
     const metadata = body.payload?.metadata ?? {};
     const topupIdFromMetadata = metadata.topupId ?? null;
+    const orderIdFromMetadata = metadata.orderId ?? null;
+    const typeFromMetadata = metadata.type ?? null;
 
-    if (!checkoutIdFromPayload && !topupIdFromMetadata) {
+    if (!checkoutIdFromPayload && !topupIdFromMetadata && !orderIdFromMetadata) {
       console.warn("[Yoco webhook] missing identifiers", {
         eventType,
         checkoutIdFromPayload,
         topupIdFromMetadata,
+        orderIdFromMetadata,
       });
       return new Response("Missing identifiers", { status: 400 });
     }
 
-    // 6) Find the ledger entry for this topup
-    // Primary: metadata.topupId; fallback: checkoutId
+// 6) Find the ledger entry or order
     let entry = null;
+    let order = null;
 
-    if (topupIdFromMetadata) {
-      entry = await prisma.ledgerEntry.findUnique({
-        where: { id: topupIdFromMetadata },
+    if (typeFromMetadata === "order_payment" && orderIdFromMetadata) {
+      // Handle order payment
+      order = await prisma.order.findUnique({
+        where: { id: orderIdFromMetadata },
         include: { store: true },
       });
-    }
 
-    if (!entry && checkoutIdFromPayload) {
-      entry = await prisma.ledgerEntry.findFirst({
-        where: {
-          checkoutId: checkoutIdFromPayload,
-          type: LedgerType.TOPUP,
-        },
-        include: { store: true },
-      });
-    }
+      if (!order) {
+        console.warn("[Yoco webhook] order not found", {
+          orderId: orderIdFromMetadata,
+        });
+        return new Response("OK", { status: 200 });
+      }
 
-    if (!entry) {
-      console.warn("[Yoco webhook] ledger entry not found for topup", {
-        eventType,
-        topupIdFromMetadata,
-        checkoutIdFromPayload,
-      });
-      // Return 200 so Yoco doesn't keep retrying forever.
-      return new Response("OK", { status: 200 });
+      if (order.checkoutId !== checkoutIdFromPayload) {
+        console.warn("[Yoco webhook] checkout ID mismatch", {
+          orderCheckoutId: order.checkoutId,
+          payloadCheckoutId: checkoutIdFromPayload,
+        });
+        return new Response("OK", { status: 200 });
+      }
+    } else {
+      // Handle topup (existing logic)
+      if (topupIdFromMetadata) {
+        entry = await prisma.ledgerEntry.findUnique({
+          where: { id: topupIdFromMetadata },
+          include: { store: true },
+        });
+      }
+
+      if (!entry && checkoutIdFromPayload) {
+        entry = await prisma.ledgerEntry.findFirst({
+          where: {
+            checkoutId: checkoutIdFromPayload,
+            type: LedgerType.TOPUP,
+          },
+          include: { store: true },
+        });
+      }
+
+      if (!entry) {
+        console.warn("[Yoco webhook] ledger entry not found for topup", {
+          eventType,
+          topupIdFromMetadata,
+          checkoutIdFromPayload,
+        });
+        // Return 200 so Yoco doesn't keep retrying forever.
+        return new Response("OK", { status: 200 });
+      }
     }
 
     // 7) Idempotency: if already COMPLETED, do nothing
-    if (entry.status === LedgerStatus.COMPLETED) {
+    if ((entry && entry.status === LedgerStatus.COMPLETED) || (order && order.status !== "PENDING")) {
       return new Response("OK", { status: 200 });
     }
 
     // 8) Handle event types
     if (eventType === "payment.succeeded") {
-      // Topup successful: mark ledger entry as COMPLETED
-      // and increase store.creditCents by amountCents
-      await prisma.$transaction(async (tx) => {
-        const store = await tx.store.findUnique({
-          where: { id: entry.storeId },
+      if (order) {
+        // Order payment successful: mark order as paid and proceed with confirmation
+        // For now, just mark as accepted (assuming payment means it's ready to be processed)
+        await prisma.order.update({
+          where: { id: order.id },
+          data: {
+            status: "ACCEPTED", // or whatever status makes sense
+          },
         });
 
-        if (!store) {
-          // Store missing; mark failed but don't crash webhook
+        // TODO: Trigger order confirmation emails/WhatsApp here
+        // Since the order was already created, we can enqueue confirmations now
+        try {
+          const { enqueueOrderConfirmationEmail } = await import("@/lib/queues/emailQueue");
+          const { enqueueOrderConfirmationWhatsApp } = await import("@/lib/queues/whatsappQueue");
+          const { clearCartForUser } = await import("@/lib/cart");
+
+          await enqueueOrderConfirmationEmail({
+            tenantId: order.storeId,
+            orderId: order.id,
+            userId: order.customerId ? order.customerId : order.storeId,
+          });
+
+          await enqueueOrderConfirmationWhatsApp({
+            orderId: order.id,
+            userId: order.customerId ? order.customerId : order.storeId,
+          });
+
+          // Clear the cart now that payment succeeded
+          if (order.customerId) {
+            await clearCartForUser(order.customerId);
+          }
+        } catch (err) {
+          console.error("[Yoco webhook] Failed to enqueue confirmations or clear cart", err);
+        }
+      } else if (entry) {
+        // Topup successful: mark ledger entry as COMPLETED
+        // and increase store.creditCents by amountCents
+        await prisma.$transaction(async (tx) => {
+          const store = await tx.store.findUnique({
+            where: { id: entry.storeId },
+          });
+
+          if (!store) {
+            // Store missing; mark failed but don't crash webhook
+            await tx.ledgerEntry.update({
+              where: { id: entry.id },
+              data: {
+                status: LedgerStatus.FAILED,
+                note: "Store not found while applying topup.",
+              },
+            });
+            return;
+          }
+
+          const currentBalance = store.creditCents ?? 0;
+          const newBalance = currentBalance + entry.amountCents;
+
+          await tx.store.update({
+            where: { id: store.id },
+            data: {
+              creditCents: newBalance,
+            },
+          });
+
           await tx.ledgerEntry.update({
             where: { id: entry.id },
             data: {
-              status: LedgerStatus.FAILED,
-              note: "Store not found while applying topup.",
+              status: LedgerStatus.COMPLETED,
+              balanceCents: newBalance,
+              provider: "YOCO",
+              checkoutId: entry.checkoutId ?? checkoutIdFromPayload ?? undefined,
             },
           });
-          return;
-        }
-
-        const currentBalance = store.creditCents ?? 0;
-        const newBalance = currentBalance + entry.amountCents;
-
-        await tx.store.update({
-          where: { id: store.id },
-          data: {
-            creditCents: newBalance,
-          },
         });
-
-        await tx.ledgerEntry.update({
-          where: { id: entry.id },
-          data: {
-            status: LedgerStatus.COMPLETED,
-            balanceCents: newBalance,
-            provider: "YOCO",
-            checkoutId: entry.checkoutId ?? checkoutIdFromPayload ?? undefined,
-          },
-        });
-      });
+      }
     } else if (
       eventType === "payment.failed" ||
       eventType === "payment.canceled"
     ) {
-      // Mark the topup as failed; do not adjust balance
-      await prisma.ledgerEntry.update({
-        where: { id: entry.id },
-        data: {
-          status: LedgerStatus.FAILED,
-          provider: "YOCO",
-          checkoutId: entry.checkoutId ?? checkoutIdFromPayload ?? undefined,
-        },
-      });
+      if (order) {
+        // Order payment failed: cancel the order
+        await prisma.order.update({
+          where: { id: order.id },
+          data: {
+            status: "CANCELLED",
+          },
+        });
+      } else if (entry) {
+        // Mark the topup as failed; do not adjust balance
+        await prisma.ledgerEntry.update({
+          where: { id: entry.id },
+          data: {
+            status: LedgerStatus.FAILED,
+            provider: "YOCO",
+            checkoutId: entry.checkoutId ?? checkoutIdFromPayload ?? undefined,
+          },
+        });
+      }
     } else {
       // Unknown/ignored event — log for debugging but don't change balance
       console.log("[Yoco webhook] Ignored event type", {
         eventType,
-        topupId: entry.id,
+        entryId: entry?.id,
+        orderId: order?.id,
       });
     }
 

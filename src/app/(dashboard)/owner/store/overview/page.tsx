@@ -4,9 +4,10 @@ import { getCurrentUser, assertRole } from "@/lib/auth";
 import type { OrderStatus } from "@prisma/client";
 import Link from "next/link";
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
 export const metadata: Metadata = {
-  title: "Store overview", // becomes "Store overview | Kasi Flavors" via root template
+  title: "Store overview",
   description:
     "See a summary of your store’s balance, active orders, sales, and top items in the Kasi Flavors owner dashboard.",
   alternates: {
@@ -27,7 +28,7 @@ export const metadata: Metadata = {
   },
   robots: {
     index: false,
-    follow: false, // private owner view; don’t expose in search
+    follow: false,
     googleBot: {
       index: false,
       follow: false,
@@ -64,7 +65,68 @@ function statusLabel(status: OrderStatus) {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-export default async function StoreOverviewPage() {
+type SearchParams = {
+  saved?: string; // "1"
+  error?: string; // message
+};
+
+async function updateStoreSettings(formData: FormData) {
+  "use server";
+
+  const user = await getCurrentUser();
+  assertRole(user, ["STORE_OWNER"]);
+
+  const store = await prisma.store.findUnique({
+    where: { ownerId: user.id },
+    select: {
+      id: true,
+      _count: { select: { couriers: true } },
+    },
+  });
+
+  if (!store) {
+    redirect("/owner/store/overview?error=" + encodeURIComponent("No store linked to this account."));
+  }
+
+  const isOpen = formData.get("isOpen") === "on";
+  const supportsCollection = formData.get("supportsCollection") === "on";
+  const supportsDelivery = formData.get("supportsDelivery") === "on";
+
+  // Basic guardrails so the UI never lies:
+  if (!supportsCollection && !supportsDelivery) {
+    redirect(
+      "/owner/store/overview?error=" +
+        encodeURIComponent("Choose at least one option: Collection or Delivery.")
+    );
+  }
+
+  // Delivery requires couriers assigned (based on your data model).
+  if (supportsDelivery && store._count.couriers === 0) {
+    redirect(
+      "/owner/store/overview?error=" +
+        encodeURIComponent("You can’t enable Delivery until at least 1 courier is assigned to your store.")
+    );
+  }
+
+  await prisma.store.update({
+    where: { id: store.id },
+    data: {
+      isOpen,
+      supportsCollection,
+      supportsDelivery,
+    },
+  });
+
+  redirect("/owner/store/overview?saved=1");
+}
+
+export default async function StoreOverviewPage({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
+  const sp = await searchParams;
+
   const user = await getCurrentUser();
   assertRole(user, ["STORE_OWNER"]);
 
@@ -77,6 +139,12 @@ export default async function StoreOverviewPage() {
       isOpen: true,
       city: true,
       area: true,
+
+      // NEW (make sure these exist in your Prisma Store model)
+      supportsCollection: true,
+      supportsDelivery: true,
+
+      _count: { select: { couriers: true } },
     },
   });
 
@@ -88,8 +156,8 @@ export default async function StoreOverviewPage() {
             No store linked to this account
           </h1>
           <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-            This owner account does not have a store configured yet. Please
-            contact support or complete your store setup.
+            This owner account does not have a store configured yet. Please contact
+            support or complete your store setup.
           </p>
         </div>
       </main>
@@ -97,58 +165,31 @@ export default async function StoreOverviewPage() {
   }
 
   const now = new Date();
-  const todayStart = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
-    0,
-    0,
-    0,
-    0,
-  );
-  const last7DaysStart = new Date(
-    now.getTime() - 7 * 24 * 60 * 60 * 1000,
-  );
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+  const last7DaysStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-  // Load last 7 days of orders for this store (includes today)
   const ordersLast7 = await prisma.order.findMany({
     where: {
       storeId: store.id,
       createdAt: { gte: last7DaysStart },
     },
-    include: {
-      items: true,
-    },
+    include: { items: true },
     orderBy: { createdAt: "desc" },
-    take: 500, // safety cap
+    take: 500,
   });
 
-  const activeOrders = ordersLast7.filter((o) =>
-    ACTIVE_STATUSES.includes(o.status),
-  );
+  const activeOrders = ordersLast7.filter((o) => ACTIVE_STATUSES.includes(o.status));
+  const todayOrders = ordersLast7.filter((o) => o.createdAt >= todayStart);
 
-  const todayOrders = ordersLast7.filter(
-    (o) => o.createdAt >= todayStart,
-  );
-
-  const totalTodayCents = todayOrders.reduce(
-    (sum, o) => sum + o.totalCents,
-    0,
-  );
-
-  const total7DaysCents = ordersLast7.reduce(
-    (sum, o) => sum + o.totalCents,
-    0,
-  );
+  const totalTodayCents = todayOrders.reduce((sum, o) => sum + o.totalCents, 0);
+  const total7DaysCents = ordersLast7.reduce((sum, o) => sum + o.totalCents, 0);
 
   const completed7 = ordersLast7.filter((o) => o.status === "COMPLETED");
   const avgOrderValue7 =
     completed7.length > 0
-      ? completed7.reduce((sum, o) => sum + o.totalCents, 0) /
-        completed7.length
+      ? completed7.reduce((sum, o) => sum + o.totalCents, 0) / completed7.length
       : 0;
 
-  // Orders by status (last 7 days)
   const statusCounts = ordersLast7.reduce<Record<OrderStatus, number>>(
     (acc, o) => {
       acc[o.status] = (acc[o.status] || 0) + 1;
@@ -162,23 +203,14 @@ export default async function StoreOverviewPage() {
       OUT_FOR_DELIVERY: 0,
       COMPLETED: 0,
       CANCELLED: 0,
-    },
+    }
   );
 
-  // Top items in last 7 days
-  const itemTotals = new Map<
-    string,
-    { name: string; qty: number; revenueCents: number }
-  >();
-
+  const itemTotals = new Map<string, { name: string; qty: number; revenueCents: number }>();
   for (const order of ordersLast7) {
     for (const item of order.items) {
       const key = item.name;
-      const existing = itemTotals.get(key) ?? {
-        name: item.name,
-        qty: 0,
-        revenueCents: 0,
-      };
+      const existing = itemTotals.get(key) ?? { name: item.name, qty: 0, revenueCents: 0 };
       existing.qty += item.quantity;
       existing.revenueCents += item.totalCents;
       itemTotals.set(key, existing);
@@ -193,10 +225,25 @@ export default async function StoreOverviewPage() {
   const isNegativeBalance = currentBalance < 0;
 
   const recentOrders = ordersLast7.slice(0, 8);
+  const courierCount = store._count.couriers;
 
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-6 dark:bg-slate-950">
       <div className="mx-auto max-w-5xl space-y-5">
+        {/* Banner messages */}
+        {(sp.saved === "1" || sp.error) && (
+          <div
+            className={[
+              "rounded-xl border p-3 text-xs shadow-sm",
+              sp.error
+                ? "border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-200"
+                : "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200",
+            ].join(" ")}
+          >
+            {sp.error ? sp.error : "Settings saved."}
+          </div>
+        )}
+
         {/* Header */}
         <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -207,8 +254,10 @@ export default async function StoreOverviewPage() {
               Summary for{" "}
               <span className="font-medium text-slate-800 dark:text-slate-100">
                 {store.name}
-              </span>{" "}
-              · {store.area}, {store.city}
+              </span>
+              {" · "}
+              {store.area ? `${store.area}, ` : ""}
+              {store.city}
             </p>
           </div>
 
@@ -227,6 +276,105 @@ export default async function StoreOverviewPage() {
             </Link>
           </div>
         </header>
+
+        {/* NEW: Store settings (Open/Closed + Fulfillment) */}
+        <section className="rounded-xl border border-slate-200 bg-white p-4 text-xs shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+                Store settings
+              </h2>
+              <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                Control whether customers can place orders, and what options you support.
+              </p>
+            </div>
+
+            <div className="text-right text-[11px] text-slate-500 dark:text-slate-400">
+              Couriers assigned: <span className="font-semibold text-slate-900 dark:text-slate-50">{courierCount}</span>
+            </div>
+          </div>
+
+          <form action={updateStoreSettings} className="mt-4 grid gap-3 sm:grid-cols-2">
+            {/* Open/Closed */}
+            <div className="rounded-lg bg-slate-50 px-3 py-3 dark:bg-slate-950/50">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Availability
+              </p>
+
+              <label className="mt-2 flex items-center gap-2 text-sm text-slate-800 dark:text-slate-100">
+                <input
+                  type="checkbox"
+                  name="isOpen"
+                  defaultChecked={store.isOpen}
+                  className="h-4 w-4"
+                />
+                Open for orders
+              </label>
+
+              <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                When closed, customers can still see your store, but can’t place orders.
+              </p>
+
+              {isNegativeBalance && (
+                <p className="mt-2 text-[11px] text-rose-700 dark:text-rose-300">
+                  Your balance is negative. Consider keeping the store closed until settled.
+                </p>
+              )}
+            </div>
+
+            {/* Fulfillment */}
+            <div className="rounded-lg bg-slate-50 px-3 py-3 dark:bg-slate-950/50">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                Fulfillment
+              </p>
+
+              <div className="mt-2 space-y-2">
+                <label className="flex items-center gap-2 text-sm text-slate-800 dark:text-slate-100">
+                  <input
+                    type="checkbox"
+                    name="supportsCollection"
+                    defaultChecked={store.supportsCollection}
+                    className="h-4 w-4"
+                  />
+                  Collection
+                </label>
+
+                <label className="flex items-center gap-2 text-sm text-slate-800 dark:text-slate-100">
+                  <input
+                    type="checkbox"
+                    name="supportsDelivery"
+                    defaultChecked={store.supportsDelivery}
+                    className="h-4 w-4"
+                    disabled={!store.supportsDelivery && courierCount === 0}
+                  />
+                  Delivery
+                </label>
+
+                {courierCount === 0 && !store.supportsDelivery && (
+                  <p className="text-[11px] text-amber-700 dark:text-amber-300">
+                    Add at least 1 courier to enable Delivery.
+                  </p>
+                )}
+              </div>
+
+              <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                These options show on the customer homepage (badges + filters).
+              </p>
+            </div>
+
+            <div className="sm:col-span-2 flex items-center justify-between">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                Tip: keep at least one option enabled (Collection or Delivery).
+              </p>
+              <button
+                type="submit"
+                className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+              >
+                Save settings
+              </button>
+            </div>
+          </form>
+        </section>
 
         {/* Stat cards row */}
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -274,8 +422,7 @@ export default async function StoreOverviewPage() {
               {formatMoney(totalTodayCents)}
             </p>
             <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-              Across {todayOrders.length} order
-              {todayOrders.length === 1 ? "" : "s"} today.
+              Across {todayOrders.length} order{todayOrders.length === 1 ? "" : "s"} today.
             </p>
           </div>
 
@@ -288,9 +435,8 @@ export default async function StoreOverviewPage() {
               {formatMoney(total7DaysCents)}
             </p>
             <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-              {ordersLast7.length} order
-              {ordersLast7.length === 1 ? "" : "s"} · avg{" "}
-              {ordersLast7.length > 0 ? formatMoney(avgOrderValue7) : "R 0.00"}
+              {ordersLast7.length} order{ordersLast7.length === 1 ? "" : "s"} · avg{" "}
+              {completed7.length > 0 ? formatMoney(avgOrderValue7) : "R 0.00"}
             </p>
           </div>
         </section>
@@ -416,22 +562,11 @@ export default async function StoreOverviewPage() {
                 </thead>
                 <tbody>
                   {recentOrders.map((o) => (
-                    <tr
-                      key={o.id}
-                      className="border-t border-slate-100 dark:border-slate-800"
-                    >
-                      <td className="py-1 pr-3 whitespace-nowrap">
-                        #{o.id.slice(-6)}
-                      </td>
-                      <td className="py-1 pr-3 whitespace-nowrap">
-                        {formatDateTime(o.createdAt)}
-                      </td>
-                      <td className="py-1 pr-3 whitespace-nowrap">
-                        {statusLabel(o.status)}
-                      </td>
-                      <td className="py-1 pr-3 text-right whitespace-nowrap">
-                        {formatMoney(o.totalCents)}
-                      </td>
+                    <tr key={o.id} className="border-t border-slate-100 dark:border-slate-800">
+                      <td className="py-1 pr-3 whitespace-nowrap">#{o.id.slice(-6)}</td>
+                      <td className="py-1 pr-3 whitespace-nowrap">{formatDateTime(o.createdAt)}</td>
+                      <td className="py-1 pr-3 whitespace-nowrap">{statusLabel(o.status)}</td>
+                      <td className="py-1 pr-3 text-right whitespace-nowrap">{formatMoney(o.totalCents)}</td>
                     </tr>
                   ))}
                 </tbody>
