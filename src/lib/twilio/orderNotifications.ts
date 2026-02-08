@@ -53,11 +53,13 @@ export async function sendOrderReadyWhatsApp(
           `Your order ${shortOrderId} at ${storeName} is now *ready for collection*.`
         );
 
-        if (isCollection && pickupCode) {
+        const isInternalPickupCode = typeof pickupCode === "string" && pickupCode.startsWith("MANUAL-");
+
+        if (isCollection && pickupCode && !isInternalPickupCode) {
           lines.push(`Your pickup code is: *${pickupCode}*.`);
         }
 
-        if (isCollection && !pickupCode) {
+        if (isCollection && (!pickupCode || isInternalPickupCode)) {
           lines.push(`Show this message at the counter when you arrive.`);
         }
       } else if (status === "OUT_FOR_DELIVERY") {
@@ -95,6 +97,7 @@ export async function sendOrderReadyWhatsApp(
     }
 
     const isCollection = fulfilmentType === "COLLECTION";
+    const isInternalPickupCode = typeof pickupCode === "string" && pickupCode.startsWith("MANUAL-");
 
     const contentVariables = JSON.stringify({
       // Adjust indices / keys to match your Twilio template
@@ -102,7 +105,7 @@ export async function sendOrderReadyWhatsApp(
       "2": storeName,
       "3": shortOrderId,
       "4": status === "READY_FOR_COLLECTION" ? "Ready for collection" : "Out for delivery",
-      "5": isCollection && pickupCode ? pickupCode : "",
+      "5": isCollection && pickupCode && !isInternalPickupCode ? pickupCode : "",
     });
 
     const message = await client.messages.create({

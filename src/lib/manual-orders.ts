@@ -94,7 +94,11 @@ export async function createManualOrder({
   });
 
   // -------- PICKUP CODE, ESTIMATE, TRACKING --------
-  const pickupCode = Math.floor(100000 + Math.random() * 900000).toString();
+  // Manual orders shouldn't require a customer-facing pickup code, but the
+  // `pickupCode` field is non-null and unique in the schema. Generate a
+  // store-internal unique token prefixed with "MANUAL-" so it won't be used
+  // by customers, and remains unique.
+  const pickupCode = `MANUAL-${randomUUID().split("-")[0].toUpperCase()}`;
 
   const store = await prisma.store.findUnique({ where: { id: storeId } });
   const estimatedReadyAt = new Date();
@@ -117,13 +121,17 @@ export async function createManualOrder({
         fulfilmentType === "DELIVERY"
           ? "CASH_ON_DELIVERY"
           : "CASH_ON_COLLECTION",
-      status: "PENDING",
+      // Manual orders: start immediately in preparation rather than pending,
+      // and use an internal pickup token (customers won't need it).
+      status: "IN_PREPARATION",
       source: "MANUAL",
       createdByOwnerId: ownerId,
       totalCents,
       note: safeNote.length ? safeNote : null,
       trackingToken,
       pickupCode,
+      // Ensure unique idempotency key for manual orders to avoid null-unique issues
+      idempotencyKey: randomUUID(),
       estimatedReadyAt,
       items: {
         create: orderItems.map((it) => ({

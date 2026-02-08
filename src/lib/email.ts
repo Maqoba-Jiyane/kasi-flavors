@@ -129,6 +129,18 @@ export function buildOrderConfirmationEmail(
     fulfilmentType === "COLLECTION"
       ? "You chose <strong>collection</strong>. When you arrive at the store, give them the code below to confirm your order."
       : "You chose <strong>delivery</strong>. When the driver arrives, they will ask for the code below to confirm your order.";
+  const isInternalPickupCode = typeof pickupCode === "string" && pickupCode.startsWith("MANUAL-");
+
+  const codeBlock = !isInternalPickupCode && pickupCode
+    ? `
+        <div style="margin-bottom: 16px; padding: 12px 14px; background: #0f172a; border-radius: 10px; color: #e5e7eb;">
+          <p style="margin: 0 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color:#a5b4fc;">Your code</p>
+          <p style="margin: 0 0 6px; font-size: 26px; letter-spacing: 0.3em; font-weight: 700;">${pickupCode}</p>
+          <p style="margin: 0; font-size: 12px; color: #e5e7eb;">
+            ${fulfilmentText}
+          </p>
+        </div>
+      ` : "";
 
   const html = `
     <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 24px; background: #f5f5f5;">
@@ -141,13 +153,7 @@ export function buildOrderConfirmationEmail(
           Order reference: <code style="background:#e2e8f0; padding:2px 6px; border-radius: 999px; font-size: 11px;">#${shortId}</code>
         </p>
 
-        <div style="margin-bottom: 16px; padding: 12px 14px; background: #0f172a; border-radius: 10px; color: #e5e7eb;">
-          <p style="margin: 0 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color:#a5b4fc;">Your code</p>
-          <p style="margin: 0 0 6px; font-size: 26px; letter-spacing: 0.3em; font-weight: 700;">${pickupCode}</p>
-          <p style="margin: 0; font-size: 12px; color: #e5e7eb;">
-            ${fulfilmentText}
-          </p>
-        </div>
+        ${codeBlock}
 
         <div style="margin: 20px 0; text-align: center;">
           <a 
@@ -207,6 +213,15 @@ export function buildOrderReadyEmail(
   const message = isCollection
     ? `Your order at ${safeStoreName} is ready for collection. When you arrive at the store, give them this code to confirm your order:`
     : `Your order at ${safeStoreName} is on its way. When the driver arrives, they will ask for this code to confirm your order:`;
+  const isInternalPickupCodeReady = typeof pickupCode === "string" && pickupCode.startsWith("MANUAL-");
+
+  const codeBlockReady = !isInternalPickupCodeReady && pickupCode
+    ? `
+        <div style="margin-bottom: 16px; padding: 12px 14px; background: #0f172a; border-radius: 10px; color: #e5e7eb; text-align:center;">
+          <p style="margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color:#a5b4fc;">Your code</p>
+          <p style="margin: 0; font-size: 28px; letter-spacing: 0.3em; font-weight: 700;">${pickupCode}</p>
+        </div>
+      ` : "";
 
   const html = `
     <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 24px; background: #f5f5f5;">
@@ -218,10 +233,7 @@ export function buildOrderReadyEmail(
           ${message}
         </p>
 
-        <div style="margin-bottom: 16px; padding: 12px 14px; background: #0f172a; border-radius: 10px; color: #e5e7eb; text-align:center;">
-          <p style="margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color:#a5b4fc;">Your code</p>
-          <p style="margin: 0; font-size: 28px; letter-spacing: 0.3em; font-weight: 700;">${pickupCode}</p>
-        </div>
+        ${codeBlockReady}
 
         <p style="margin-top: 12px; font-size: 12px; color:#64748b;">
           Order reference: <code style="background:#e2e8f0; padding:2px 6px; border-radius: 999px; font-size: 11px;">#${shortId}</code>

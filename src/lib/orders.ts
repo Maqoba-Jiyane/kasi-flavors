@@ -13,7 +13,12 @@ export async function createOrderFromPayload(args: {
   fulfilmentType: "COLLECTION" | "DELIVERY";
   note?: string | null;
   customerId?: string | null;
-  idempotencyKey?: string; // 👈 NEW
+  idempotencyKey?: string;
+  paymentMethod?: "CASH_ON_DELIVERY" | "CASH_ON_COLLECTION" | "ONLINE_PAYMENT";
+  deliveryAddress?: string | null;
+  deliveryLat?: number | null;
+  deliveryLng?: number | null;
+  deliveryFeeCents?: number; // NEW: delivery fee to add to total
 }) {
   const {
     storeId,
@@ -25,6 +30,11 @@ export async function createOrderFromPayload(args: {
     note,
     customerId,
     idempotencyKey,
+    paymentMethod = "CASH_ON_DELIVERY",
+    deliveryAddress,
+    deliveryLat,
+    deliveryLng,
+    deliveryFeeCents = 0,
   } = args;
 
   // Basic validation
@@ -77,6 +87,9 @@ export async function createOrderFromPayload(args: {
     };
   });
 
+  // Add delivery fee to total
+  totalCents += deliveryFeeCents;
+
   const pickupCode = generatePickupCode();
   const estimatedReadyAt = new Date();
   estimatedReadyAt.setMinutes(
@@ -98,7 +111,7 @@ export async function createOrderFromPayload(args: {
     }
   }
 
-  const created = await prisma.order.create({
+    const created = await prisma.order.create({
     data: {
       store: { connect: { id: store.id } },
       customer: customerRelation,
@@ -106,15 +119,18 @@ export async function createOrderFromPayload(args: {
       customerPhone: phone ?? "",
       customerEmail: email,
       fulfilmentType,
-      paymentMethod: "CASH_ON_DELIVERY",
-      status: "PENDING",
+      paymentMethod,
+      status: paymentMethod === "ONLINE_PAYMENT" ? "ACCEPTED" : "PENDING",
       totalCents,
-      deliveryAddress: fulfilmentType === "DELIVERY" ? "" : null,
+      deliveryFeeCents: deliveryFeeCents > 0 ? deliveryFeeCents : null,
+      deliveryAddress: deliveryAddress || (fulfilmentType === "DELIVERY" ? "" : null),
+      deliveryLat: deliveryLat ?? null,
+      deliveryLng: deliveryLng ?? null,
       note: note ?? null,
       pickupCode,
       trackingToken,
       estimatedReadyAt,
-      idempotencyKey: idempotencyKey ?? null,
+      idempotencyKey: idempotencyKey ?? randomUUID(),
       items: {
         create: orderItemsData.map((it) => ({
           productId: it.productId,

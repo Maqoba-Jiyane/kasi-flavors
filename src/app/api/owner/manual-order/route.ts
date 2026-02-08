@@ -40,8 +40,7 @@ export async function POST(req: Request) {
       storeId: store.id,
       items,
       note: body.note,
-      fulfilmentType:
-        body.fulfilmentType === "DELIVERY" ? "DELIVERY" : "COLLECTION",
+      fulfilmentType: "COLLECTION",
       // optional customer details (owner may enter)
       customerName: body.customerName,
       customerPhone: body.customerPhone,

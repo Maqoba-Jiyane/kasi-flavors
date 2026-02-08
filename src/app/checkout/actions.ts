@@ -19,6 +19,7 @@ const checkoutSchema = z.object({
   email: z.string().email(), // 👈 add email if you want explicit email field
   fulfilmentType: z.enum(["COLLECTION", "DELIVERY"]),
   address: z.string().optional(),
+  customerId: z.string(),
   note: z.string().optional(),
 });
 
@@ -80,7 +81,7 @@ export async function placeOrderAction(formData: FormData) {
 
   const now = new Date();
   const estimatedReadyAt = new Date(
-    now.getTime() + store.avgPrepTimeMinutes * 60_000
+    now.getTime() + store.avgPrepTimeMinutes * 60_000,
   );
   const pickupCode = generatePickupCode();
 
@@ -91,14 +92,18 @@ export async function placeOrderAction(formData: FormData) {
       customerPhone: payload.phone ?? null,
       customerEmail: payload.email,
       fulfilmentType: payload.fulfilmentType,
-      paymentMethod: payload.fulfilmentType === "DELIVERY" ? "CASH_ON_DELIVERY" : "CASH_ON_COLLECTION",
+      paymentMethod:
+        payload.fulfilmentType === "DELIVERY"
+          ? "CASH_ON_DELIVERY"
+          : "CASH_ON_COLLECTION",
       totalCents,
       deliveryAddress:
-        payload.fulfilmentType === "DELIVERY" ? payload.address ?? "" : null,
+        payload.fulfilmentType === "DELIVERY" ? (payload.address ?? "") : null,
       note: payload.note,
       pickupCode,
       trackingToken,
       estimatedReadyAt,
+      customerId: payload.customerId,
       items: {
         create: itemsWithPricing.map((i) => ({
           productId: i.product.id,

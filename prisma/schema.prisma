@@ -16,6 +16,7 @@ enum UserRole {
   CUSTOMER
   STORE_OWNER
   ADMIN
+  DELIVERY
 }
 
 enum OrderStatus {
@@ -36,6 +37,7 @@ enum FulfilmentType {
 enum PaymentMethod {
   CASH_ON_DELIVERY
   CASH_ON_COLLECTION
+  ONLINE_PAYMENT
 }
 
 model User {
@@ -50,6 +52,9 @@ model User {
   store       Store?   @relation("StoreOwner")
 
   orders      Order[]  @relation("CustomerOrders")
+
+  // Courier assignment
+  courierAssignment Courier?
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -70,22 +75,54 @@ model Store {
   city               String
   area               String
   avgPrepTimeMinutes Int        @default(25)
-  creditCents        Int      @default(5000)
+  creditCents        Int        @default(5000)
   isOpen             Boolean    @default(true)
 
-  // Owner lives here (FK on Store side)
+  // NEW: Fulfillment
+  supportsCollection Boolean    @default(true)
+  supportsDelivery   Boolean    @default(false)
+
   owner   User   @relation("StoreOwner", fields: [ownerId], references: [id])
   ownerId String @db.ObjectId @unique
 
-  products  Product[]
-  orders    Order[]
+    // Delivery settings (MVP)
+  deliveryRadiusKm   Int?     // e.g. 5, 10, 15
+  deliveryFeeCents   Int?     // flat fee, e.g. 2000 = R20.00
+  minOrderCents      Int?     // optional: minimum basket for delivery
+
+  // Optional (needed if you want distance validation)
+  lat                Float?
+  lng                Float?
+
+  products    Product[]
+  orders      Order[]
   LedgerEntry LedgerEntry[]
+  couriers    Courier[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
   @@index([isOpen])
+  @@index([supportsDelivery])
+  @@index([supportsCollection])
+
   Email Email[]
+}
+
+model Courier {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String   @db.ObjectId @unique
+  
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  storeId   String   @db.ObjectId
+  
+  isActive  Boolean  @default(true)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([storeId])
 }
 
 model Product {
@@ -125,6 +162,7 @@ model Order {
   status           OrderStatus   @default(PENDING)
 
   totalCents       Int
+  deliveryFeeCents Int?            // Delivery fee charged (separate from items)
   platformFeeCents Int?            // amount platform charges (10% of underlying store amount)
   platformFeePaid  Boolean @default(false) // becomes true when we deduct from store credit
   deliveryAddress  String?
@@ -140,8 +178,14 @@ model Order {
   // 👇 NEW: client-provided idempotency key for checkout
   idempotencyKey   String?       @unique
   
+  // For online payments
+  checkoutId       String?
+  
   estimatedReadyAt DateTime?
   completedAt      DateTime?
+
+  deliveryLat      Float?
+  deliveryLng      Float?
 
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt

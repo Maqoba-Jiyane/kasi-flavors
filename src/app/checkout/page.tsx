@@ -153,6 +153,8 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
           itemsJson={JSON.stringify(itemsForPayload)}
           totalFormatted={totalFormatted}
           user={user}
+          deliveryFeeCents={store.deliveryFeeCents ?? undefined}
+          deliveryRadiusKm={store.deliveryRadiusKm ?? undefined}
         />
       </div>
     </main>

@@ -1,5 +1,6 @@
 // lib/phoneVerification.ts
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { randomInt, createHash, timingSafeEqual } from "crypto";
 import { addMinutes, isBefore } from "date-fns";
 import { sendPhoneVerificationOtpWhatsApp } from "@/lib/twilio/verification";
@@ -69,13 +70,27 @@ export async function ensurePhoneVerifiedOrStartVerification(args: {
 
   // Ensure Phone row exists (unverified)
   if (!existingPhone) {
-    await prisma.phone.create({
-      data: {
-        userId,
-        phoneNumber: normalizedPhone,
-        verified: false,
-      },
-    });
+    try {
+      await prisma.phone.create({
+        data: {
+          userId,
+          phoneNumber: normalizedPhone,
+          verified: false,
+        },
+      });
+    } catch (err: unknown) {
+      // Ignore unique constraint race (another request created it concurrently)
+      if (
+        err &&
+        typeof err === "object" &&
+        "code" in err &&
+        (err as any).code === "P2002"
+      ) {
+        // already exists — safe to proceed
+      } else {
+        throw err;
+      }
+    }
   }
 
   return { status: "verification_started" as const };

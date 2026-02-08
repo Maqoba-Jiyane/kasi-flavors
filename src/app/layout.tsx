@@ -7,6 +7,7 @@ import AdminNavbar from "@/components/nav/AdminNavbar";
 import { getCartForUser, getEmptyCart } from "@/lib/cart";
 import { getCurrentUserMinimal } from "@/lib/auth";
 import { ToasterProvider } from "@/components/ui/ToasterProvider";
+import Footer from "@/components/Footer";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -102,7 +103,7 @@ export default async function RootLayout({
     <ClerkProvider>
       <html lang="en">
         <body
-          className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+          className={`${geistSans.variable} ${geistMono.variable} antialiased flex flex-col min-h-screen`}
         >
           {user?.role === "ADMIN" ? (
             <AdminNavbar />
@@ -110,7 +111,8 @@ export default async function RootLayout({
             <CustomerNavbar cartCount={cartCount} userName={user?.name} />
           )}
         <ToasterProvider />
-          <main>{children}</main>
+          <main className="flex-1">{children}</main>
+          <Footer />
         </body>
       </html>
     </ClerkProvider>

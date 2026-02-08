@@ -8,9 +8,11 @@ type OrderPageRouteParams = {
   orderId: string;
 };
 
-export async function generateMetadata(
-  { params }: { params: Promise<OrderPageRouteParams> }
-): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<OrderPageRouteParams>;
+}): Promise<Metadata> {
   const { orderId } = await params;
   const shortId = orderId.slice(-6);
 
@@ -18,33 +20,25 @@ export async function generateMetadata(
   const urlPath = `/orders/${orderId}`;
 
   return {
-    title, // becomes "Order #XXXXXX | Kasi Flavors" via root template
+    title,
     description:
       "View the status, pickup or delivery code, and details for this Kasi Flavors order.",
-    alternates: {
-      canonical: urlPath,
-    },
+    alternates: { canonical: urlPath },
     openGraph: {
       type: "website",
       title: `${title} | Kasi Flavors`,
-      description:
-        "Track the status and view details for your Kasi Flavors order.",
+      description: "Track the status and view details for your Kasi Flavors order.",
       url: urlPath,
     },
     twitter: {
       card: "summary",
       title: `${title} | Kasi Flavors`,
-      description:
-        "Track the status and see details for your Kasi Flavors order.",
+      description: "Track the status and see details for your Kasi Flavors order.",
     },
     robots: {
       index: false,
       follow: false,
-      googleBot: {
-        index: false,
-        follow: false,
-        noimageindex: true,
-      },
+      googleBot: { index: false, follow: false, noimageindex: true },
     },
   };
 }
@@ -62,7 +56,6 @@ interface OrderPageProps {
   params: Promise<{ orderId: string }>;
 }
 
-// Simple status pill for customers
 function StatusBadge({ status }: { status: OrderStatus }) {
   const label = status
     .toLowerCase()
@@ -116,7 +109,21 @@ function minutesDiff(from: Date, to: Date) {
   return Math.round((to.getTime() - from.getTime()) / 60000);
 }
 
-// Reusable "order not found" UI so we can use it both for real 404 and unauthorized access
+function humanizePaymentMethod(pm: string | null | undefined) {
+  if (!pm) return "—";
+  switch (pm) {
+    case "CASH_ON_DELIVERY":
+      return "Cash on delivery";
+    case "ONLINE_PAYMENT":
+      return "Online payment";
+    default:
+      return pm
+        .toLowerCase()
+        .replace(/_/g, " ")
+        .replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+}
+
 function OrderNotFound() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 dark:bg-slate-950">
@@ -125,8 +132,7 @@ function OrderNotFound() {
           Order not found
         </h1>
         <p className="mt-2 text-sm text-slate-500 dark:text-slate-300">
-          We couldn&apos;t find that order. Please check your link or contact
-          the store.
+          We couldn&apos;t find that order. Please check your link or contact the store.
         </p>
       </div>
     </main>
@@ -139,26 +145,56 @@ export default async function OrderPage({ params }: OrderPageProps) {
   // 1) Require authentication
   const user = await getCurrentUser();
   if (!user) {
-    // Redirect to sign-in and come back here afterwards
     redirect(`/sign-in?redirectUrl=/orders/${orderId}`);
   }
 
-  // 2) Load order with customer info + store + items
+  // 2) Load order with store + items
+  // NOTE: include only what you need (keeps it fast + safer)
   const order = await prisma.order.findUnique({
     where: { id: orderId },
-    include: {
-      store: true,
-      items: true,
+    select: {
+      id: true,
+      storeId: true,
+      customerId: true,
+      customerEmail: true,
+      customerName: true,
+      customerPhone: true,
+      fulfilmentType: true,
+      paymentMethod: true,
+      status: true,
+      totalCents: true,
+      deliveryFeeCents: true,
+      pickupCode: true,
+      deliveryAddress: true,
+      note: true,
+      trackingToken: true,
+      estimatedReadyAt: true,
+      createdAt: true,
+      completedAt: true,
+      store: {
+        select: {
+          name: true,
+          area: true,
+          city: true,
+        },
+      },
+      items: {
+        select: {
+          id: true,
+          name: true,
+          quantity: true,
+          unitCents: true,
+          totalCents: true,
+        },
+      },
     },
   });
 
-  // If no order at all -> normal "not found"
-  if (!order) {
-    return <OrderNotFound />;
-  }
+  if (!order) return <OrderNotFound />;
 
-  // 3) Check ownership:
-  // Prefer customerId, fall back to customerEmail match (case-insensitive)
+  // 3) Verify ownership:
+  // - best: customerId matches
+  // - fallback: email matches (case-insensitive)
   const ownsById = !!order.customerId && order.customerId === user.id;
 
   const ownsByEmail =
@@ -167,49 +203,71 @@ export default async function OrderPage({ params }: OrderPageProps) {
     order.customerEmail.toLowerCase() === user.email.toLowerCase();
 
   if (!ownsById && !ownsByEmail) {
-    // Do NOT reveal that the order exists; just show "not found"
     return <OrderNotFound />;
   }
 
-  // 4) Safe to render full order details for this user
   const shortId = order.id.slice(-6);
   const store = order.store;
+
   const now = new Date();
   const eta = order.estimatedReadyAt ?? null;
 
-  const showCode =
-    order.status === "READY_FOR_COLLECTION" ||
-    order.status === "OUT_FOR_DELIVERY" ||
-    order.status === "COMPLETED";
+  const isTerminal = order.status === "COMPLETED" || order.status === "CANCELLED";
 
+  // ✅ Code visibility rules:
+  // - COLLECTION: show at READY_FOR_COLLECTION and later (incl COMPLETED)
+  // - DELIVERY: show at OUT_FOR_DELIVERY and later (incl COMPLETED)
+  const isInternalPickupCode = typeof order.pickupCode === "string" && order.pickupCode.startsWith("MANUAL-");
+
+  let showCode =
+    (order.fulfilmentType === "COLLECTION" &&
+      (order.status === "READY_FOR_COLLECTION" || order.status === "COMPLETED")) ||
+    (order.fulfilmentType === "DELIVERY" &&
+      (order.status === "OUT_FOR_DELIVERY" || order.status === "COMPLETED"));
+
+  if (isInternalPickupCode) showCode = false;
+
+  // Only show “minutes remaining” if:
+  // - we have an ETA
+  // - order isn’t terminal
+  // - and ETA is in the future-ish
   const minutesRemaining =
-    eta && order.status !== "COMPLETED" ? minutesDiff(now, eta) : null;
+    eta && !isTerminal ? minutesDiff(now, eta) : null;
 
-  // Compute queue position for this order
+  // Queue position:
+  // Don’t include OUT_FOR_DELIVERY in queue (for customers, it’s “left the store”)
+  const queueEligibleStatuses: OrderStatus[] = [
+    "PENDING",
+    "ACCEPTED",
+    "IN_PREPARATION",
+    "READY_FOR_COLLECTION",
+  ];
+
   const isInQueue =
-    order.status !== "COMPLETED" && order.status !== "CANCELLED";
+    order.fulfilmentType === "COLLECTION"
+      ? queueEligibleStatuses.includes(order.status as OrderStatus)
+      : ["PENDING", "ACCEPTED", "IN_PREPARATION"].includes(order.status);
 
   let queuePosition: number | null = null;
 
   if (isInQueue) {
-    const ACTIVE_STATUSES: OrderStatus[] = [
-      "PENDING",
-      "ACCEPTED",
-      "IN_PREPARATION",
-      "READY_FOR_COLLECTION",
-      "OUT_FOR_DELIVERY",
-    ];
+    const activeForQueue: OrderStatus[] =
+      order.fulfilmentType === "COLLECTION"
+        ? queueEligibleStatuses
+        : ["PENDING", "ACCEPTED", "IN_PREPARATION"];
 
     const ordersAheadCount = await prisma.order.count({
       where: {
         storeId: order.storeId,
-        status: { in: ACTIVE_STATUSES },
+        status: { in: activeForQueue as any },
         createdAt: { lt: order.createdAt },
       },
     });
 
     queuePosition = ordersAheadCount + 1;
   }
+
+  const paymentLabel = humanizePaymentMethod(order.paymentMethod as any);
 
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-6 dark:bg-slate-950">
@@ -232,8 +290,7 @@ export default async function OrderPage({ params }: OrderPageProps) {
             <div className="flex flex-col items-end gap-2">
               <StatusBadge status={order.status as OrderStatus} />
               <p className="text-[11px] text-slate-500 dark:text-slate-300">
-                Placed on {formatDate(order.createdAt)} at{" "}
-                {formatTime(order.createdAt)}
+                Placed on {formatDate(order.createdAt)} at {formatTime(order.createdAt)}
               </p>
             </div>
           </div>
@@ -246,7 +303,14 @@ export default async function OrderPage({ params }: OrderPageProps) {
               <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
                 Estimated time
               </p>
-              {eta ? (
+
+              {isTerminal ? (
+                <p className="mt-1 text-sm text-slate-600 dark:text-slate-200">
+                  {order.status === "COMPLETED"
+                    ? `Completed on ${order.completedAt ? formatDate(order.completedAt) : "—"}`
+                    : "This order was cancelled."}
+                </p>
+              ) : eta ? (
                 <>
                   <p className="mt-1 text-lg font-semibold text-slate-900 dark:text-slate-50">
                     Ready around {formatTime(eta)}
@@ -269,20 +333,18 @@ export default async function OrderPage({ params }: OrderPageProps) {
             <div className="space-y-2 rounded-lg bg-slate-50 px-3 py-2 text-xs dark:bg-slate-950/50">
               <div>
                 <p className="font-medium text-slate-700 dark:text-slate-100">
-                  {order.fulfilmentType === "COLLECTION"
-                    ? "Collection order"
-                    : "Delivery order"}
+                  {order.fulfilmentType === "COLLECTION" ? "Collection order" : "Delivery order"}
                 </p>
+
                 {order.fulfilmentType === "COLLECTION" ? (
                   <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-300">
-                    You&apos;ll collect your food at the store. When the status
-                    changes to <strong>Ready for collection</strong>,
-                    you&apos;ll use your pickup code.
+                    When the status becomes <strong>Ready for collection</strong>, use your{" "}
+                    <strong>pickup code</strong> at the store.
                   </p>
                 ) : (
                   <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-300">
-                    A driver will deliver your order. When they arrive, they
-                    will ask for your delivery code.
+                    When the status becomes <strong>Out for delivery</strong>, your{" "}
+                    <strong>delivery code</strong> will show here.
                   </p>
                 )}
               </div>
@@ -290,13 +352,17 @@ export default async function OrderPage({ params }: OrderPageProps) {
               {isInQueue && queuePosition !== null && (
                 <div className="rounded-md bg-slate-900/5 px-2 py-1.5 text-[11px] text-slate-700 dark:bg-slate-100/5 dark:text-slate-200">
                   <p className="font-medium">
-                    You&apos;re{" "}
-                    <span className="font-semibold">#{queuePosition}</span> in
-                    the queue at {store.name}.
+                    You&apos;re <span className="font-semibold">#{queuePosition}</span> in the queue.
                   </p>
                   <p className="mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">
-                    This position is based on other active orders ahead of you.
+                    Based on active orders created before yours.
                   </p>
+                </div>
+              )}
+
+              {order.fulfilmentType === "DELIVERY" && order.status === "OUT_FOR_DELIVERY" && (
+                <div className="rounded-md bg-cyan-50 px-2 py-1.5 text-[11px] text-cyan-800 ring-1 ring-cyan-100 dark:bg-cyan-950/40 dark:text-cyan-200 dark:ring-cyan-900/50">
+                  Your order has left the store and is on the way.
                 </div>
               )}
             </div>
@@ -306,30 +372,32 @@ export default async function OrderPage({ params }: OrderPageProps) {
         {/* Pickup / delivery code */}
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-            {order.fulfilmentType === "COLLECTION"
-              ? "Pickup code"
-              : "Delivery code"}
+            {order.fulfilmentType === "COLLECTION" ? "Pickup code" : "Delivery code"}
           </p>
 
           {showCode ? (
-            <div className="mt-2 flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm text-slate-600 dark:text-slate-200">
-                  Give this code to the{" "}
-                  {order.fulfilmentType === "COLLECTION" ? "store" : "driver"}{" "}
-                  to confirm your order:
-                </p>
-                <p className="mt-2 text-2xl font-mono font-semibold tracking-[0.2em] text-slate-900 dark:text-slate-50">
+            <div className="mt-2">
+              <p className="text-sm text-slate-600 dark:text-slate-200">
+                Give this code to the{" "}
+                {order.fulfilmentType === "COLLECTION" ? "store" : "driver"} to confirm your order:
+              </p>
+
+              <div className="mt-2 flex items-center justify-between gap-3">
+                <p className="text-2xl font-mono font-semibold tracking-[0.2em] text-slate-900 dark:text-slate-50">
                   {order.pickupCode}
                 </p>
               </div>
+
+              <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-300">
+                Don&apos;t share your code publicly.
+              </p>
             </div>
           ) : (
             <p className="mt-2 text-sm text-slate-500 dark:text-slate-300">
-              Your code will be available once the store has{" "}
+              Your code will appear once the store{" "}
               {order.fulfilmentType === "COLLECTION"
-                ? "finished preparing your order"
-                : "sent your order out for delivery"}
+                ? "marks your order as Ready for collection"
+                : "marks your order as Out for delivery"}
               .
             </p>
           )}
@@ -337,16 +405,11 @@ export default async function OrderPage({ params }: OrderPageProps) {
 
         {/* Order items + totals */}
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-            Items
-          </h2>
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Items</h2>
 
           <ul className="mt-3 divide-y divide-slate-100 text-sm dark:divide-slate-800">
             {order.items.map((item) => (
-              <li
-                key={item.id}
-                className="flex items-center justify-between py-2"
-              >
+              <li key={item.id} className="flex items-center justify-between py-2">
                 <div className="flex flex-col">
                   <span className="font-medium text-slate-900 dark:text-slate-50">
                     {item.name}
@@ -364,13 +427,19 @@ export default async function OrderPage({ params }: OrderPageProps) {
 
           <div className="mt-3 border-t border-slate-200 pt-3 text-sm dark:border-slate-800">
             <div className="flex items-center justify-between">
-              <span className="text-slate-600 dark:text-slate-300">
-                Payment method
-              </span>
+              <span className="text-slate-600 dark:text-slate-300">Payment method</span>
               <span className="font-medium text-slate-900 dark:text-slate-100">
-                Cash on delivery
+                {paymentLabel}
               </span>
             </div>
+
+            {order.deliveryFeeCents && order.deliveryFeeCents > 0 && (
+              <div className="mt-2 flex items-center justify-between text-slate-600 dark:text-slate-300">
+                <span>Delivery fee</span>
+                <span>{formatPrice(order.deliveryFeeCents)}</span>
+              </div>
+            )}
+
             <div className="mt-2 flex items-center justify-between font-semibold text-slate-900 dark:text-slate-50">
               <span>Total</span>
               <span>{formatPrice(order.totalCents)}</span>
@@ -378,23 +447,32 @@ export default async function OrderPage({ params }: OrderPageProps) {
           </div>
         </section>
 
-        {/* Delivery address / note (if delivery) */}
+        {/* Delivery details */}
         {order.fulfilmentType === "DELIVERY" && (
           <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
               Delivery details
             </h2>
+
             {order.deliveryAddress && (
               <div className="mt-2 text-sm text-slate-600 dark:text-slate-200">
                 <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
                   Address
                 </p>
                 <p className="mt-1 whitespace-pre-line">
-                  {order.deliveryAddress}
+                  <a
+                    href={`https://maps.google.com/?q=${encodeURIComponent(order.deliveryAddress)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300"
+                  >
+                    {order.deliveryAddress}
+                  </a>
                 </p>
               </div>
             )}
-            {order.note && (
+
+            {order.note && order.note.trim() !== "" && (
               <div className="mt-3 text-sm text-slate-600 dark:text-slate-200">
                 <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
                   Note to store
