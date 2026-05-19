@@ -9,6 +9,7 @@ export default function robots(): MetadataRoute.Robots {
           "/",            // homepage
           "/store/",       // public store pages
           "/checkout",     // checkout entry (optional)
+          "/owner-application", // store owner apply page
         ],
         disallow: [
           "/admin",

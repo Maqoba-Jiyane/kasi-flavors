@@ -1,6 +1,7 @@
 // lib/manual-orders.ts
 import { prisma } from "@/lib/prisma";
 import { randomUUID } from "crypto";
+import { applyPriceAdjustment } from "./pricing";
 
 type ManualLine = { productId: string; quantity: number };
 
@@ -60,6 +61,12 @@ export async function createManualOrder({
 
   // -------- FETCH PRODUCTS (TENANT-SAFE) --------
   const productIds = items.map((i) => i.productId);
+
+  // pull store up front so we can honor its price adjustment settings
+  const store = await prisma.store.findUnique({ where: { id: storeId } });
+  if (!store) throw new Error("Store not found");
+  const storeAny = store as any; // for TS, fields added in schema may not exist yet
+
   const products = await prisma.product.findMany({
     where: { id: { in: productIds }, storeId },
   });
@@ -80,7 +87,22 @@ export async function createManualOrder({
     const baseQty = Number.isFinite(rawQty) ? Math.floor(rawQty) : 1;
     const qty = Math.max(1, Math.min(MAX_QTY_PER_ITEM, baseQty));
 
-    const unitCents = p.priceCents;
+    // apply product-level adjustment first, then store
+    let unitCents = p.priceCents;
+    if ((p as any).priceAdjustmentEnabled && (p as any).priceAdjustmentPercent) {
+      unitCents = applyPriceAdjustment(
+        unitCents,
+        (p as any).priceAdjustmentEnabled,
+        (p as any).priceAdjustmentPercent,
+      );
+    }
+    if (storeAny.priceAdjustmentEnabled && storeAny.priceAdjustmentPercent) {
+      unitCents = applyPriceAdjustment(
+        unitCents,
+        storeAny.priceAdjustmentEnabled,
+        storeAny.priceAdjustmentPercent,
+      );
+    }
     const totalItemCents = unitCents * qty;
     totalCents += totalItemCents;
 
@@ -100,10 +122,9 @@ export async function createManualOrder({
   // by customers, and remains unique.
   const pickupCode = `MANUAL-${randomUUID().split("-")[0].toUpperCase()}`;
 
-  const store = await prisma.store.findUnique({ where: { id: storeId } });
   const estimatedReadyAt = new Date();
   estimatedReadyAt.setMinutes(
-    estimatedReadyAt.getMinutes() + (store?.avgPrepTimeMinutes ?? 25),
+    estimatedReadyAt.getMinutes() + (store.avgPrepTimeMinutes ?? 25),
   );
 
   const trackingToken = randomUUID();

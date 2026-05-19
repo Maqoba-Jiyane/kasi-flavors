@@ -49,15 +49,18 @@ model User {
   phone       String?
 
   // A store owner owns at most one store (MVP)
-  store       Store?   @relation("StoreOwner")
+  store Store? @relation("StoreOwner")
 
-  orders      Order[]  @relation("CustomerOrders")
+  orders Order[] @relation("CustomerOrders")
 
   // Courier assignment
   courierAssignment Courier?
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  // applications submitted by this user
+  ownerApplications OwnerApplication[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   Phone Phone[]
 
@@ -67,130 +70,202 @@ model User {
 }
 
 model Store {
-  id                 String     @id @default(auto()) @map("_id") @db.ObjectId
+  id                 String  @id @default(auto()) @map("_id") @db.ObjectId
   name               String
-  slug               String     @unique
+  slug               String  @unique
   description        String?
   address            String
   city               String
   area               String
-  avgPrepTimeMinutes Int        @default(25)
-  creditCents        Int        @default(5000)
-  isOpen             Boolean    @default(true)
+  phone              String?
+  avgPrepTimeMinutes Int     @default(25)
+  creditCents        Int     @default(5000)
+  isOpen             Boolean @default(true)
 
   // NEW: Fulfillment
-  supportsCollection Boolean    @default(true)
-  supportsDelivery   Boolean    @default(false)
+  supportsCollection Boolean @default(true)
+  supportsDelivery   Boolean @default(false)
 
   owner   User   @relation("StoreOwner", fields: [ownerId], references: [id])
-  ownerId String @db.ObjectId @unique
+  ownerId String @unique @db.ObjectId
 
-    // Delivery settings (MVP)
-  deliveryRadiusKm   Int?     // e.g. 5, 10, 15
-  deliveryFeeCents   Int?     // flat fee, e.g. 2000 = R20.00
-  minOrderCents      Int?     // optional: minimum basket for delivery
+  // Delivery settings (MVP)
+  deliveryRadiusKm Int? // e.g. 5, 10, 15
+  deliveryFeeCents Int? // flat fee, e.g. 2000 = R20.00
+  minOrderCents    Int? // optional: minimum basket for delivery
 
   // Optional (needed if you want distance validation)
-  lat                Float?
-  lng                Float?
+  lat Float?
+  lng Float?
+
+  // GLOBAL price adjustment (markup/discount) – still available on store level
+  priceAdjustmentEnabled Boolean @default(false)
+  priceAdjustmentPercent Float   @default(0)
+
+  onlinePaymentsEnabled Boolean @default(true)
 
   products    Product[]
   orders      Order[]
   LedgerEntry LedgerEntry[]
   couriers    Courier[]
 
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  Email          Email[]
+  menuCategories MenuCategory[]
 
   @@index([isOpen])
   @@index([supportsDelivery])
   @@index([supportsCollection])
+}
 
-  Email Email[]
+// Owner application flow: prospective store owners submit details, admin reviews
+
+enum OwnerApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model OwnerApplication {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  user   User?   @relation(fields: [userId], references: [id])
+  userId String? @db.ObjectId
+
+  storeName   String
+  slug        String  @unique
+  description String?
+  address     String?
+  city        String?
+  area        String?
+
+  status OwnerApplicationStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([userId])
 }
 
 model Courier {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId    String   @db.ObjectId @unique
-  
-  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  storeId   String   @db.ObjectId
-  
-  isActive  Boolean  @default(true)
-  
+  id     String @id @default(auto()) @map("_id") @db.ObjectId
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String @unique @db.ObjectId
+
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  storeId String @db.ObjectId
+
+  isActive Boolean @default(true)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  
+
   @@index([storeId])
 }
 
+enum ProductNamingTheme {
+  DESCRIPTIVE
+  KASI_STYLE
+  MINIMAL
+  COMBO_STYLE
+  STORE_BRANDED
+}
+
+model MenuCategory {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  store   Store  @relation(fields: [storeId], references: [id])
+  storeId String @db.ObjectId
+
+  name      String
+  slug      String
+  sortOrder Int     @default(0)
+  isActive  Boolean @default(true)
+
+  products Product[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([storeId, name])
+  @@unique([storeId, slug])
+  @@index([storeId])
+  @@index([storeId, sortOrder])
+}
+
 model Product {
-  id          String   @id @default(auto()) @map("_id") @db.ObjectId
-  store       Store    @relation(fields: [storeId], references: [id])
-  storeId     String   @db.ObjectId
+  id      String @id @default(auto()) @map("_id") @db.ObjectId
+  store   Store  @relation(fields: [storeId], references: [id])
+  storeId String @db.ObjectId
 
   name        String
   description String?
   priceCents  Int
   imageUrl    String?
-  isAvailable Boolean  @default(true)
+  isAvailable Boolean @default(true)
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  category   MenuCategory? @relation(fields: [categoryId], references: [id])
+  categoryId String?       @db.ObjectId
 
-  orderItems  OrderItem[]
+  // Optional per-product override (markup or discount)
+  priceAdjustmentEnabled Boolean @default(false)
+  priceAdjustmentPercent Float   @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orderItems OrderItem[]
+  CartItem   CartItem[]
 
   @@index([storeId])
   @@index([storeId, name])
-  CartItem CartItem[]
 }
 
 model Order {
-  id               String        @id @default(auto()) @map("_id") @db.ObjectId
-  store            Store         @relation(fields: [storeId], references: [id])
-  storeId          String        @db.ObjectId
+  id      String @id @default(auto()) @map("_id") @db.ObjectId
+  store   Store  @relation(fields: [storeId], references: [id])
+  storeId String @db.ObjectId
 
-  customer         User?         @relation("CustomerOrders", fields: [customerId], references: [id])
-  customerId       String?       @db.ObjectId
+  customer   User?   @relation("CustomerOrders", fields: [customerId], references: [id])
+  customerId String? @db.ObjectId
 
-  customerName     String?
-  customerPhone    String?
-  customerEmail    String?
-  fulfilmentType   FulfilmentType
-  paymentMethod    PaymentMethod @default(CASH_ON_DELIVERY)
-  status           OrderStatus   @default(PENDING)
+  customerName   String?
+  customerPhone  String?
+  customerEmail  String?
+  fulfilmentType FulfilmentType
+  paymentMethod  PaymentMethod  @default(CASH_ON_DELIVERY)
+  status         OrderStatus    @default(PENDING)
 
   totalCents       Int
-  deliveryFeeCents Int?            // Delivery fee charged (separate from items)
-  platformFeeCents Int?            // amount platform charges (10% of underlying store amount)
-  platformFeePaid  Boolean @default(false) // becomes true when we deduct from store credit
+  deliveryFeeCents Int? // Delivery fee charged (separate from items)
   deliveryAddress  String?
   note             String?
 
-  source           OrderSource   @default(CUSTOMER)
-  createdByOwnerId String?       @db.ObjectId  // owner who created order (if source = MANUAL)
+  source           OrderSource @default(CUSTOMER)
+  createdByOwnerId String?     @db.ObjectId // owner who created order (if source = MANUAL)
 
-
-  pickupCode       String        @unique
-  trackingToken    String        @unique
+  pickupCode    String @unique
+  trackingToken String @unique
 
   // 👇 NEW: client-provided idempotency key for checkout
-  idempotencyKey   String?       @unique
-  
+  idempotencyKey String? @unique
+
   // For online payments
-  checkoutId       String?
-  
+  checkoutId String?
+
   estimatedReadyAt DateTime?
   completedAt      DateTime?
 
-  deliveryLat      Float?
-  deliveryLng      Float?
+  deliveryLat Float?
+  deliveryLng Float?
 
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  items            OrderItem[]
+  items OrderItem[]
   Email Email[]
 
   @@index([storeId])
@@ -199,12 +274,12 @@ model Order {
 }
 
 model OrderItem {
-  id         String   @id @default(auto()) @map("_id") @db.ObjectId
-  order      Order    @relation(fields: [orderId], references: [id])
-  orderId    String   @db.ObjectId
+  id      String @id @default(auto()) @map("_id") @db.ObjectId
+  order   Order  @relation(fields: [orderId], references: [id])
+  orderId String @db.ObjectId
 
-  product    Product  @relation(fields: [productId], references: [id])
-  productId  String   @db.ObjectId
+  product   Product @relation(fields: [productId], references: [id])
+  productId String  @db.ObjectId
 
   name       String
   quantity   Int
@@ -216,12 +291,12 @@ model OrderItem {
 }
 
 enum LedgerType {
-  FEE_RESERVE       // reserved when order created (not yet debited)
-  FEE_DEBIT         // actual debit to store balance when fee is captured
-  TOPUP             // store top up (owner payment)
-  REFUND            // refund / reversal
-  PAYOUT            // payout from platform to store (if you ever implement payouts)
-  ADJUSTMENT        // manual admin adjustment
+  FEE_RESERVE // reserved when order created (not yet debited)
+  FEE_DEBIT // actual debit to store balance when fee is captured
+  TOPUP // store top up (owner payment)
+  REFUND // refund / reversal
+  PAYOUT // payout from platform to store (if you ever implement payouts)
+  ADJUSTMENT // manual admin adjustment
 }
 
 enum LedgerStatus {
@@ -231,22 +306,22 @@ enum LedgerStatus {
 }
 
 model LedgerEntry {
-  id           String     @id @default(auto()) @map("_id") @db.ObjectId
-  store        Store      @relation(fields: [storeId], references: [id])
-  storeId      String     @db.ObjectId
+  id           String       @id @default(auto()) @map("_id") @db.ObjectId
+  store        Store        @relation(fields: [storeId], references: [id])
+  storeId      String       @db.ObjectId
   type         LedgerType
   status       LedgerStatus @default(PENDING)
-  orderId      String?    @db.ObjectId   // optional: which order created this
-  amountCents  Int        // positive values: interpretation per type (FEE_DEBIT reduces balance)
-  balanceCents Int?       // snapshot of store.creditCents after this entry (if known)
-  
+  orderId      String?      @db.ObjectId // optional: which order created this
+  amountCents  Int // positive values: interpretation per type (FEE_DEBIT reduces balance)
+  balanceCents Int? // snapshot of store.creditCents after this entry (if known)
+
   //Top ups
-  provider      String?
-  checkoutId    String?
-  
-  note         String?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @default(now())
+  provider   String?
+  checkoutId String?
+
+  note      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now())
 
   @@index([storeId])
   @@index([orderId])
@@ -254,11 +329,11 @@ model LedgerEntry {
 }
 
 model Phone {
-  id           String  @id @default(auto()) @map("_id") @db.ObjectId
-  user         User    @relation(fields: [userId], references: [id])
-  userId       String  @db.ObjectId
-  phoneNumber  String  @unique
-  verified     Boolean @default(false)
+  id          String  @id @default(auto()) @map("_id") @db.ObjectId
+  user        User    @relation(fields: [userId], references: [id])
+  userId      String  @db.ObjectId
+  phoneNumber String  @unique
+  verified    Boolean @default(false)
 }
 
 model PhoneVerification {
@@ -273,36 +348,35 @@ model PhoneVerification {
   updatedAt   DateTime @updatedAt
 }
 
-
 enum EmailStatus {
-  PENDING   // created, queued for sending
-  SENDING   // QStash handler picked it up
-  SENT      // successfully sent
-  FAILED    // all attempts failed (or latest call failed)
+  PENDING // created, queued for sending
+  SENDING // QStash handler picked it up
+  SENT // successfully sent
+  FAILED // all attempts failed (or latest call failed)
 }
 
 model Email {
-  id        String      @id @default(auto()) @map("_id") @db.ObjectId
+  id String @id @default(auto()) @map("_id") @db.ObjectId
 
-  type      String                      // e.g. "ORDER_CONFIRMATION"
-  to        String                      // destination email
+  type      String // e.g. "ORDER_CONFIRMATION"
+  to        String // destination email
   subject   String
   status    EmailStatus @default(PENDING)
   attempts  Int         @default(0)
   lastError String?
 
   // Optional linking (nice for multi-tenant + debugging)
-  order     Order?      @relation(fields: [orderId], references: [id])
-  orderId   String?     @db.ObjectId
+  order   Order?  @relation(fields: [orderId], references: [id])
+  orderId String? @db.ObjectId
 
-  store     Store?      @relation(fields: [storeId], references: [id])
-  storeId   String?     @db.ObjectId
+  store   Store?  @relation(fields: [storeId], references: [id])
+  storeId String? @db.ObjectId
 
-  user      User?       @relation(fields: [userId], references: [id])
-  userId    String?     @db.ObjectId
+  user   User?   @relation(fields: [userId], references: [id])
+  userId String? @db.ObjectId
 
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([to])
   @@index([type])
@@ -317,26 +391,64 @@ model Cart {
   customerId String?    @db.ObjectId
   items      CartItem[]
 
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([customerId])
 }
 
 model CartItem {
-  id         String   @id @default(auto()) @map("_id") @db.ObjectId
-  cart       Cart     @relation(fields: [cartId], references: [id])
-  cartId     String   @db.ObjectId
+  id     String @id @default(auto()) @map("_id") @db.ObjectId
+  cart   Cart   @relation(fields: [cartId], references: [id])
+  cartId String @db.ObjectId
 
-  product    Product  @relation(fields: [productId], references: [id])
-  productId  String   @db.ObjectId
+  product   Product @relation(fields: [productId], references: [id])
+  productId String  @db.ObjectId
 
-  quantity   Int
+  quantity Int
 
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // One row per product per cart – important for atomic upserts later
   @@unique([cartId, productId])
   @@index([cartId])
+}
+
+model StoreOnboarding {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  // owner     User     @relation(fields: [ownerId], references: [id])
+  ownerId String @db.ObjectId
+
+  status String @default("DRAFT")
+
+  storeName   String?
+  description String?
+  address     String?
+  area        String?
+  city        String?
+  phone       String?
+
+  avgPrepTimeMinutes    Int     @default(25)
+  supportsCollection    Boolean @default(true)
+  supportsDelivery      Boolean @default(false)
+  deliveryFeeCents      Int?
+  deliveryRadiusKm      Float?
+  onlinePaymentsEnabled Boolean @default(false)
+
+  namingTheme ProductNamingTheme @default(DESCRIPTIVE)
+
+  menuImages        Json?
+  extractedMenuJson    Json?
+  reviewedProductsJson Json?
+
+  createdStoreId String? @db.ObjectId
+  errorMessage   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ownerId])
+  @@index([status])
 }

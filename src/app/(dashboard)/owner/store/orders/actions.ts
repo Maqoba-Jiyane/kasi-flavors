@@ -5,7 +5,6 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser, assertRole } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import type { OrderStatus } from "@prisma/client";
-import { chargePlatformFeeOnCompletion } from "@/lib/billing";
 import { enqueueOrderReadyEmail } from "@/lib/queues/emailQueue";
 import { enqueueOrderReadyWhatsApp } from "@/lib/queues/whatsappQueue";
 
@@ -164,10 +163,6 @@ export async function updateOrderStatus(formData: FormData) {
     },
   });
 
-  // 6) If order just became COMPLETED, charge platform fee
-  if (nextStatus === "COMPLETED" && previousStatus !== "COMPLETED") {
-    await chargePlatformFeeOnCompletion(order.id);
-  }
 
   // 7) Decide if we should send "order ready" email
   const becameReadyForCollection =
@@ -280,9 +275,6 @@ export async function confirmOrderWithCode(formData: FormData) {
     },
   });
 
-  // Charge platform fee for this completed order
-  await chargePlatformFeeOnCompletion(orderId);
-
   revalidatePath("/owner/store/orders");
 }
 
@@ -369,14 +361,5 @@ export async function completeDelivery(formData: FormData) {
     },
   });
 
-  // Charge platform fee for this completed order
-  await chargePlatformFeeOnCompletion(orderId);
 
-  revalidatePath("/delivery");
-  revalidatePath("/owner/store/orders");
-
-  return {
-    success: true,
-    error: "Delivery completed successfully",
-  };
 }

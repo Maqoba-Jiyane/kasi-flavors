@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ShoppingCart } from "lucide-react";
 
 interface CartSummaryBarProps {
   itemCount: number;
@@ -26,27 +27,32 @@ export function CartSummaryBar({
 
     try {
       setIsCheckingOut(true);
-      // Support both sync and async onCheckout
       await Promise.resolve(onCheckout());
     } finally {
       setIsCheckingOut(false);
     }
   };
 
-  // Option A: hide entirely when empty (most common pattern)
   if (!hasItems) return null;
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-4 py-3 shadow-2xl shadow-slate-900/20 backdrop-blur sm:px-0 dark:border-slate-800 dark:bg-slate-900/95">
-      <div className="mx-auto flex max-w-4xl items-center justify-between gap-3">
-        <div className="flex flex-col">
-          <span className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-300">
-            Cart
-          </span>
-          <span className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-            {itemCount} item{itemCount > 1 ? "s" : ""} ·{" "}
-            {formatPrice(totalCents)}
-          </span>
+    <div className="fixed inset-x-0 bottom-0 z-40 border-t border-black/10 bg-kasi-black/95 px-4 py-3 shadow-2xl backdrop-blur sm:px-0">
+      <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-golden-yellow text-kasi-black">
+            <ShoppingCart className="h-5 w-5" />
+          </div>
+
+          <div className="flex flex-col">
+            <span className="text-xs font-black uppercase tracking-wide text-golden-yellow">
+              Your order
+            </span>
+
+            <span className="text-sm font-black text-white sm:text-base">
+              {itemCount} item{itemCount > 1 ? "s" : ""} ·{" "}
+              {formatPrice(totalCents)}
+            </span>
+          </div>
         </div>
 
         <button
@@ -56,11 +62,9 @@ export function CartSummaryBar({
           aria-busy={isCheckingOut || undefined}
           aria-disabled={!hasItems || isCheckingOut || undefined}
           aria-label={
-            isCheckingOut
-              ? "Opening cart"
-              : "View cart and proceed to checkout"
+            isCheckingOut ? "Opening cart" : "View cart and proceed to checkout"
           }
-          className="inline-flex items-center justify-center gap-2 rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-emerald-500/30 transition-all duration-150 hover:-translate-y-[1px] hover:bg-emerald-700 hover:shadow-xl active:translate-y-[1px] active:shadow-md disabled:translate-y-0 disabled:bg-slate-300 disabled:shadow-none dark:disabled:bg-slate-700"
+          className="inline-flex items-center justify-center gap-2 rounded-full bg-kasi-green px-5 py-3 text-sm font-black text-white shadow-lg transition hover:-translate-y-0.5 hover:bg-street-orange active:translate-y-0 disabled:translate-y-0 disabled:bg-white/20 disabled:text-white/50"
         >
           {isCheckingOut && (
             <span
@@ -68,9 +72,8 @@ export function CartSummaryBar({
               aria-hidden="true"
             />
           )}
-          <span className={isCheckingOut ? "opacity-90" : undefined}>
-            {isCheckingOut ? "Opening cart…" : "View cart →"}
-          </span>
+
+          <span>{isCheckingOut ? "Opening…" : "View cart →"}</span>
         </button>
       </div>
     </div>

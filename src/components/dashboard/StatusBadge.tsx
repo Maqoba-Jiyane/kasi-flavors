@@ -12,33 +12,44 @@ interface StatusBadgeProps {
 }
 
 const statusStyles: Record<OrderStatus, string> = {
-  PENDING:
-    "bg-amber-50 text-amber-700 ring-1 ring-amber-100 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900/60",
-  ACCEPTED:
-    "bg-blue-50 text-blue-700 ring-1 ring-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:ring-blue-900/60",
-  IN_PREPARATION:
-    "bg-indigo-50 text-indigo-700 ring-1 ring-indigo-100 dark:bg-indigo-950/40 dark:text-indigo-300 dark:ring-indigo-900/60",
-  READY_FOR_COLLECTION:
-    "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-900/60",
-  OUT_FOR_DELIVERY:
-    "bg-cyan-50 text-cyan-700 ring-1 ring-cyan-100 dark:bg-cyan-950/40 dark:text-cyan-300 dark:ring-cyan-900/60",
-  COMPLETED:
-    "bg-slate-100 text-slate-700 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700",
-  CANCELLED:
-    "bg-rose-50 text-rose-700 ring-1 ring-rose-100 dark:bg-rose-950/40 dark:text-rose-300 dark:ring-rose-900/60",
+  PENDING: "bg-golden-yellow text-kasi-black border-golden-yellow",
+  ACCEPTED: "bg-kasi-green/10 text-kasi-green border-kasi-green/20",
+  IN_PREPARATION: "bg-street-orange/10 text-street-orange border-street-orange/20",
+  READY_FOR_COLLECTION: "bg-kasi-green text-white border-kasi-green",
+  OUT_FOR_DELIVERY: "bg-kasi-black text-white border-kasi-black",
+  COMPLETED: "bg-black/10 text-black/60 border-black/10",
+  CANCELLED: "bg-red-50 text-red-600 border-red-200",
+};
+
+const statusDotStyles: Record<OrderStatus, string> = {
+  PENDING: "bg-kasi-black",
+  ACCEPTED: "bg-kasi-green",
+  IN_PREPARATION: "bg-street-orange",
+  READY_FOR_COLLECTION: "bg-white",
+  OUT_FOR_DELIVERY: "bg-golden-yellow",
+  COMPLETED: "bg-black/50",
+  CANCELLED: "bg-red-600",
+};
+
+const statusLabels: Record<OrderStatus, string> = {
+  PENDING: "Pending",
+  ACCEPTED: "Accepted",
+  IN_PREPARATION: "In preparation",
+  READY_FOR_COLLECTION: "Ready",
+  OUT_FOR_DELIVERY: "Out for delivery",
+  COMPLETED: "Completed",
+  CANCELLED: "Cancelled",
 };
 
 export function StatusBadge({ status }: StatusBadgeProps) {
-  const label = status
-    .toLowerCase()
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
-
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium uppercase tracking-wide ${statusStyles[status]}`}
+      className={`inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-wide ${statusStyles[status]}`}
     >
-      {label}
+      <span
+        className={`mr-1.5 h-1.5 w-1.5 rounded-full ${statusDotStyles[status]}`}
+      />
+      {statusLabels[status]}
     </span>
   );
 }

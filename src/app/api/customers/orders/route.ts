@@ -1,8 +1,8 @@
 // app/api/customers/orders/route.ts
-import {
-  ensurePhoneVerifiedOrStartVerification,
-  verifyPhoneOtp,
-} from "@/lib/phoneVerification";
+// import {
+//   ensurePhoneVerifiedOrStartVerification,
+//   verifyPhoneOtp,
+// } from "@/lib/phoneVerification";
 import { NextResponse } from "next/server";
 import { createOrderFromPayload } from "@/lib/orders";
 import { getCartForUser, clearCartForUser } from "@/lib/cart";
@@ -32,7 +32,7 @@ export async function POST(req: Request) {
     const fullName = ((form.get("fullName") as string) || "").trim();
     let phone = ((form.get("phone") as string) || "").trim();
     const email = ((form.get("email") as string) || "").trim();
-    const phoneOtp = ((form.get("phoneOtp") as string) || "").trim();
+    // const phoneOtp = ((form.get("phoneOtp") as string) || "").trim();
 
     const fulfilmentType =
       (form.get("fulfilmentType") as string) === "DELIVERY"
@@ -197,67 +197,67 @@ export async function POST(req: Request) {
     }
 
     // 3.5) Enforce phone verification if phone is provided
-    if (phone) {
-      // Check if already verified or need to start/complete verification
-      const existingPhone = await prisma.phone.findFirst({
-        where: { userId: user.id, phoneNumber: phone },
-      });
+    // if (phone) {
+    //   // Check if already verified or need to start/complete verification
+    //   const existingPhone = await prisma.phone.findFirst({
+    //     where: { userId: user.id, phoneNumber: phone },
+    //   });
 
-      if (!existingPhone || !existingPhone.verified) {
-        if (!phoneOtp) {
-          // First attempt: start verification, send OTP, and tell client to show OTP field
-          const result = await ensurePhoneVerifiedOrStartVerification({
-            userId: user.id,
-            fullName,
-            phoneNumber: phone,
-          });
+    //   if (!existingPhone || !existingPhone.verified) {
+    //     if (!phoneOtp) {
+    //       // First attempt: start verification, send OTP, and tell client to show OTP field
+    //       const result = await ensurePhoneVerifiedOrStartVerification({
+    //         userId: user.id,
+    //         fullName,
+    //         phoneNumber: phone,
+    //       });
 
-          if (result.status === "verification_started") {
-            return NextResponse.json(
-              {
-                success: false,
-                code: "PHONE_VERIFICATION_REQUIRED",
-                error:
-                  "We sent a WhatsApp verification code to your number. Please enter it to continue.",
-              },
-              { status: 400 }
-            );
-          }
-        } else {
-          // Second attempt: verify OTP
-          const verificationResult = await verifyPhoneOtp({
-            userId: user.id,
-            phoneNumber: phone,
-            code: phoneOtp,
-          });
+    //       if (result.status === "verification_started") {
+    //         return NextResponse.json(
+    //           {
+    //             success: false,
+    //             code: "PHONE_VERIFICATION_REQUIRED",
+    //             error:
+    //               "We sent a WhatsApp verification code to your number. Please enter it to continue.",
+    //           },
+    //           { status: 400 }
+    //         );
+    //       }
+    //     } else {
+    //       // Second attempt: verify OTP
+    //       const verificationResult = await verifyPhoneOtp({
+    //         userId: user.id,
+    //         phoneNumber: phone,
+    //         code: phoneOtp,
+    //       });
 
-          if (!verificationResult.ok) {
-            const reason = verificationResult.reason;
-            let errorMessage = "Invalid code. Please try again.";
+    //       if (!verificationResult.ok) {
+    //         const reason = verificationResult.reason;
+    //         let errorMessage = "Invalid code. Please try again.";
 
-            if (reason === "expired") {
-              errorMessage =
-                "Your verification code has expired. Request a new one by submitting again.";
-            } else if (reason === "locked") {
-              errorMessage =
-                "Too many incorrect attempts. Please wait before trying again.";
-            }
+    //         if (reason === "expired") {
+    //           errorMessage =
+    //             "Your verification code has expired. Request a new one by submitting again.";
+    //         } else if (reason === "locked") {
+    //           errorMessage =
+    //             "Too many incorrect attempts. Please wait before trying again.";
+    //         }
 
-            return NextResponse.json(
-              {
-                success: false,
-                code: "PHONE_VERIFICATION_FAILED",
-                reason,
-                error: errorMessage,
-              },
-              { status: 400 }
-            );
-          }
+    //         return NextResponse.json(
+    //           {
+    //             success: false,
+    //             code: "PHONE_VERIFICATION_FAILED",
+    //             reason,
+    //             error: errorMessage,
+    //           },
+    //           { status: 400 }
+    //         );
+    //       }
 
-          // At this point, Phone should be marked verified.
-        }
-      }
-    }
+    //       // At this point, Phone should be marked verified.
+    //     }
+    //   }
+    // }
 
     // 4) Idempotency
     if (idempotencyKey) {

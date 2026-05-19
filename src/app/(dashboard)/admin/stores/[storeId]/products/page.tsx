@@ -4,6 +4,7 @@ import { getCurrentUser, assertRole } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { formatPrice } from "../../../overview/page";
+import { applyPriceAdjustment } from "@/lib/pricing";
 
 interface StoreProductsPageProps {
   params: Promise<{ storeId: string }>;
@@ -44,17 +45,23 @@ async function createProduct(formData: FormData) {
   const name = (formData.get("name") as string | "").trim();
   const priceStr = (formData.get("price") as string | "").trim();
   const description = (formData.get("description") as string | "").trim();
+  const adjEnabled = formData.get("priceAdjustmentEnabled") === "on";
+  const adjPercent = Number(formData.get("priceAdjustmentPercent") || 0);
 
   if (!storeId || !name || !priceStr) {
     throw new Error("Missing required fields");
   }
 
-  const price = Number(priceStr) * 1.1;
+  const price = Number(priceStr);
+
   if (Number.isNaN(price) || price <= 0) {
     throw new Error("Invalid price");
   }
 
-  const priceCents = Math.round(price * 100);
+  // round to nearest 0.50
+  const roundedPrice = Math.round(price * 2) / 2;
+
+  const priceCents = Math.round(roundedPrice * 100);
 
   await prisma.product.create({
     data: {
@@ -63,6 +70,8 @@ async function createProduct(formData: FormData) {
       description: description || null,
       priceCents,
       isAvailable: true,
+      priceAdjustmentEnabled: adjEnabled,
+      priceAdjustmentPercent: adjPercent,
     },
   });
 
@@ -80,7 +89,23 @@ export default async function StoreProductsPage({
 
   const store = await prisma.store.findUnique({
     where: { id: storeId },
-    include: { products: { orderBy: { createdAt: "desc" } } },
+    select: {
+      id: true,
+      priceAdjustmentEnabled: true,
+      priceAdjustmentPercent: true,
+      products: {
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          priceCents: true,
+          isAvailable: true,
+          priceAdjustmentEnabled: true,
+          priceAdjustmentPercent: true,
+        },
+      },
+    },
   });
 
   if (!store) {
@@ -142,6 +167,24 @@ export default async function StoreProductsPage({
             />
           </div>
 
+          <div className="space-y-1">
+            <label className="inline-flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              <input
+                name="priceAdjustmentEnabled"
+                type="checkbox"
+                className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+              />
+              Enable adjustment
+            </label>
+            <input
+              name="priceAdjustmentPercent"
+              type="number"
+              step="0.01"
+              placeholder="Percent (e.g. 10 or -25)"
+              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-50"
+            />
+          </div>
+
           <div className="sm:col-span-2 flex justify-end">
             <button
               type="submit"
@@ -161,6 +204,7 @@ export default async function StoreProductsPage({
               <th className="px-3 py-2 text-left font-medium">Product</th>
               <th className="px-3 py-2 text-left font-medium">Description</th>
               <th className="px-3 py-2 text-right font-medium">Price</th>
+              <th className="px-3 py-2 text-right font-medium">Adj %</th>
               <th className="px-3 py-2 text-center font-medium">Status</th>
               <th className="px-3 py-2 text-right font-medium">Actions</th>
             </tr>
@@ -169,7 +213,7 @@ export default async function StoreProductsPage({
             {products.length === 0 && (
               <tr>
                 <td
-                  colSpan={5}
+                  colSpan={6}
                   className="px-3 py-6 text-center text-xs text-slate-500 dark:text-slate-400"
                 >
                   No products yet. Use the form above to add one.
@@ -180,13 +224,67 @@ export default async function StoreProductsPage({
             {products.map((p) => (
               <tr key={p.id}>
                 <td className="px-3 py-2 text-slate-800 dark:text-slate-100">
-                  {p.name}
+                  <a
+                    href={`/admin/stores/${store.id}/products/${p.id}`}
+                    className="font-medium text-emerald-600 hover:underline"
+                  >
+                    {p.name}
+                  </a>
                 </td>
                 <td className="px-3 py-2 text-slate-600 dark:text-slate-300">
                   <span className="line-clamp-2">{p.description || "—"}</span>
                 </td>
                 <td className="px-3 py-2 text-right text-slate-800 dark:text-slate-100">
-                  {formatPrice(p.priceCents)}
+                  {(() => {
+                    let price = p.priceCents;
+                    const lines: React.ReactNode[] = [];
+
+                    // show base price if adjustments exist
+                    const hasProductAdj = p.priceAdjustmentEnabled && p.priceAdjustmentPercent !== 0;
+                    const hasStoreAdj = store.priceAdjustmentEnabled && store.priceAdjustmentPercent !== 0;
+
+                    if (hasProductAdj) {
+                      const adj = applyPriceAdjustment(
+                        price,
+                        p.priceAdjustmentEnabled,
+                        p.priceAdjustmentPercent,
+                      );
+                      lines.push(
+                        <span key="prod-base" className="line-through opacity-60">
+                          {formatPrice(price)}
+                        </span>,
+                      );
+                      price = adj;
+                    }
+
+                    if (hasStoreAdj) {
+                      const adj = applyPriceAdjustment(
+                        price,
+                        store.priceAdjustmentEnabled,
+                        store.priceAdjustmentPercent,
+                      );
+                      if (!hasProductAdj) {
+                        lines.push(
+                          <span key="base" className="line-through opacity-60">
+                            {formatPrice(price)}
+                          </span>,
+                        );
+                      }
+                      price = adj;
+                    }
+
+                    lines.push(
+                      <span key="final">{formatPrice(price)}</span>
+                    );
+
+                    return <>{lines.reduce((prev, curr) => [prev, " ", curr])}</>;
+                  })()}
+                </td>
+                <td className="px-3 py-2 text-right text-slate-800 dark:text-slate-100">
+                  {p.priceAdjustmentEnabled &&
+                   p.priceAdjustmentPercent !== 0
+                    ? `${p.priceAdjustmentPercent}%`
+                    : "—"}
                 </td>
                 <td className="px-3 py-2 text-center">
                   <span
@@ -258,6 +356,11 @@ export default async function StoreProductsPage({
             <p className="mb-3 text-sm font-medium text-slate-900 dark:text-slate-50">
               {formatPrice(p.priceCents)}
             </p>
+            {p.priceAdjustmentEnabled && p.priceAdjustmentPercent !== 0 && (
+              <p className="text-xs text-slate-600 dark:text-slate-300">
+                Adj: {p.priceAdjustmentPercent}%
+              </p>
+            )}
 
             <form action={toggleAvailability}>
               <input type="hidden" name="productId" value={p.id} />

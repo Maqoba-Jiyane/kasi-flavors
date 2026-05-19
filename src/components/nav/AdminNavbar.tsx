@@ -25,6 +25,7 @@ export default function AdminNavbar({
   const links = [
     { href: "/admin", label: "Dashboard" },
     { href: "/admin/stores", label: "Stores" },
+    { href: "/admin/owner-applications", label: "Owner Applications" },
     { href: "/admin/reports", label: "Reports" },
     { href: "/admin/settings", label: "Settings" },
   ];

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Poppins } from "next/font/google";
 import "./globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
 import CustomerNavbar from "@/components/nav/CustomerNavbar";
@@ -9,39 +9,37 @@ import { getCurrentUserMinimal } from "@/lib/auth";
 import { ToasterProvider } from "@/components/ui/ToasterProvider";
 import Footer from "@/components/Footer";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const poppins = Poppins({
+  variable: "--font-poppins",
   subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800", "900"],
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://kasiflavors.co.za"), // ⬅️ update if your production domain differs
+  metadataBase: new URL("https://kasiflavors.co.za"),
   title: {
-    default: "Kasi Flavors | Kasi food delivery & collection",
+    default: "Kasi Flavors | Skip the Queue. Order Online.",
     template: "%s | Kasi Flavors",
   },
   description:
-    "Order authentic kasi cuisine from local spots near you. Browse menus, place your order online, and collect or get delivery from your favourite township kitchens.",
+    "Order authentic kasi food from local township spots near you. Browse menus, skip the queue, order online, and collect or get delivery.",
   applicationName: "Kasi Flavors",
   keywords: [
     "Kasi Flavors",
     "kasi food",
+    "kota near me",
     "township food delivery",
     "kasi cuisine",
+    "skip the queue",
+    "order online",
     "food collection",
     "South Africa food delivery",
     "local restaurants",
     "township restaurants",
     "kota",
-    "skopo",
-    "mogodo",
-    "pap",
+    "chips",
     "bunny chow",
+    "shisanyama",
   ],
   referrer: "origin-when-cross-origin",
   category: "food",
@@ -51,25 +49,25 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     siteName: "Kasi Flavors",
-    title: "Kasi Flavors | Kasi food delivery & collection",
+    title: "Kasi Flavors | Skip the Queue. Order Online.",
     description:
-      "Order authentic kasi cuisine from local spots near you. Browse menus, place your order online, and collect or get delivery from your favourite township kitchens.",
+      "Find local kasi food spots near you. Order kota, chips, bunny chow and more online for collection or delivery.",
     url: "/",
     locale: "en_ZA",
     images: [
       {
-        url: "/og-image.png", // ⬅️ ensure this exists in /public
+        url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "Kasi Flavors – kasi cuisines all under one roof",
+        alt: "Kasi Flavors – skip the queue and order kasi food online",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Kasi Flavors | Kasi food delivery & collection",
+    title: "Kasi Flavors | Skip the Queue. Order Online.",
     description:
-      "Order authentic kasi cuisine from local spots near you. Browse menus, place your order online, and collect or get delivery from your favourite township kitchens.",
+      "Order authentic kasi food from local township spots near you.",
     images: ["/og-image.png"],
   },
   robots: {
@@ -95,7 +93,6 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const user = await getCurrentUserMinimal();
-
   const cart = user ? await getCartForUser(user.id) : getEmptyCart();
   const cartCount = cart.items.reduce((sum, i) => sum + i.quantity, 0);
 
@@ -103,15 +100,18 @@ export default async function RootLayout({
     <ClerkProvider>
       <html lang="en">
         <body
-          className={`${geistSans.variable} ${geistMono.variable} antialiased flex flex-col min-h-screen`}
+          className={`${poppins.variable} min-h-screen bg-kasi-cream text-kasi-black antialiased flex flex-col`}
         >
           {user?.role === "ADMIN" ? (
             <AdminNavbar />
           ) : (
             <CustomerNavbar cartCount={cartCount} userName={user?.name} />
           )}
-        <ToasterProvider />
+
+          <ToasterProvider />
+
           <main className="flex-1">{children}</main>
+
           <Footer />
         </body>
       </html>

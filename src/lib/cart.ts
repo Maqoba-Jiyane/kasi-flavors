@@ -1,6 +1,7 @@
 // lib/cart.ts
 import { prisma } from "@/lib/prisma";
 import { MAX_QTY_PER_ITEM, MIN_QTY_PER_ITEM } from "./constants";
+import { applyPriceAdjustment } from "./pricing";
 
 export type CartItem = {
   productId: string;
@@ -54,6 +55,8 @@ export async function getCartForUser(userId: string): Promise<Cart> {
               priceCents: true,
               storeId: true,
               isAvailable: true,
+              priceAdjustmentEnabled: true,
+              priceAdjustmentPercent: true,
             },
           },
         },
@@ -75,7 +78,8 @@ export async function getCartForUser(userId: string): Promise<Cart> {
   // Enforce a maximum number of distinct line items (same as cookie version)
   const limited = validItems.slice(0, MAX_ITEMS_PER_CART);
 
-  const mapped: CartItem[] = limited.map((ci) => ({
+  // build item list including raw product data so we can apply adjustments
+  let mapped: CartItem[] = limited.map((ci) => ({
     productId: ci.productId,
     name: ci.product.name,
     priceCents: ci.product.priceCents,
@@ -84,6 +88,46 @@ export async function getCartForUser(userId: string): Promise<Cart> {
   }));
 
   const storeId = mapped[0]?.storeId ?? null;
+
+  // fetch store adjustment settings once
+  let storeAdj = { enabled: false, percent: 0 };
+  if (storeId) {
+    const store = await prisma.store.findUnique({
+      where: { id: storeId },
+      select: {
+        priceAdjustmentEnabled: true,
+        priceAdjustmentPercent: true,
+      },
+    });
+    if (store) {
+      storeAdj.enabled = store.priceAdjustmentEnabled;
+      storeAdj.percent = store.priceAdjustmentPercent;
+    }
+  }
+
+  // apply both product and store adjustments per item
+  mapped = mapped.map((item) => {
+    // find the corresponding cart item again to access product-level fields
+    const ci = limited.find((x) => x.productId === item.productId);
+    if (!ci) return item;
+
+    const prod = ci.product as any;
+    const adjusted = applyPriceAdjustment(
+      item.priceCents,
+      prod.priceAdjustmentEnabled,
+      prod.priceAdjustmentPercent,
+    );
+    const finalPrice = applyPriceAdjustment(
+      adjusted,
+      storeAdj.enabled,
+      storeAdj.percent,
+    );
+
+    return {
+      ...item,
+      priceCents: finalPrice,
+    };
+  });
 
   return {
     storeId,

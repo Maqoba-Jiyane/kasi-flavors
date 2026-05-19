@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { randomUUID } from "crypto";
+import { applyPriceAdjustment } from "./pricing";
 
 const MAX_ITEMS = 5;
 const MAX_QTY_PER_ITEM = 5;
@@ -47,6 +48,8 @@ export async function createOrderFromPayload(args: {
   const store = await prisma.store.findUnique({ where: { id: storeId } });
   
   if (!store) throw new Error("Store not found");
+  // cast to any so TS doesn't complain about newly added fields
+  const storeAny = store as any;
 
   const count = await prisma.order.count({
     where: {
@@ -74,7 +77,22 @@ export async function createOrderFromPayload(args: {
       throw new Error(`Product ${i.productId} not found in store`);
     }
     const qty = Math.max(1, Number(i.quantity) || 1);
-    const unitCents = product.priceCents;
+    // apply product-level adjustment first, then store-level
+    let unitCents = product.priceCents;
+    if ((product as any).priceAdjustmentEnabled && (product as any).priceAdjustmentPercent) {
+      unitCents = applyPriceAdjustment(
+        unitCents,
+        (product as any).priceAdjustmentEnabled,
+        (product as any).priceAdjustmentPercent,
+      );
+    }
+    if (storeAny.priceAdjustmentEnabled && storeAny.priceAdjustmentPercent) {
+      unitCents = applyPriceAdjustment(
+        unitCents,
+        storeAny.priceAdjustmentEnabled,
+        storeAny.priceAdjustmentPercent,
+      );
+    }
     const totalItemCents = unitCents * qty;
     totalCents += totalItemCents;
 

@@ -2,14 +2,17 @@ import { prisma } from "@/lib/prisma";
 import { StoreHeader } from "@/components/StoreHeader";
 import type { Metadata } from "next";
 import { StoreMenuClient } from "./StoreMenuClient";
+import { applyPriceAdjustment } from "@/lib/pricing";
 
 type StorePageRouteParams = {
   slug: string;
 };
 
-export async function generateMetadata(
-  { params }: { params: Promise<StorePageRouteParams> }
-): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<StorePageRouteParams>;
+}): Promise<Metadata> {
   const { slug } = await params;
 
   const store = await prisma.store.findUnique({
@@ -22,12 +25,10 @@ export async function generateMetadata(
     },
   });
 
-  // If the store doesn't exist, keep it out of the index
   if (!store) {
     return {
       title: "Store not found",
-      description:
-        "This kasi food spot could not be found on Kasi Flavors.",
+      description: "This kasi food spot could not be found on Kasi Flavors.",
       robots: {
         index: false,
         follow: false,
@@ -43,19 +44,19 @@ export async function generateMetadata(
   const { name, area, city, description } = store;
 
   const locationLabel = [area, city].filter(Boolean).join(", ");
-  const baseTitle = locationLabel
-    ? `${name} in ${locationLabel}`
-    : name;
+  const baseTitle = locationLabel ? `${name} in ${locationLabel}` : name;
 
   const metaDescription =
     description && description.trim().length > 40
       ? description.slice(0, 155)
-      : `Order from ${name} in ${locationLabel || "your area"} on Kasi Flavors. Browse the full menu and place your kasi food order online for collection or delivery.`;
+      : `Order from ${name} in ${
+          locationLabel || "your area"
+        } on Kasi Flavors. Browse the full menu and place your kasi food order online for collection or delivery.`;
 
   const urlPath = `/stores/${slug}`;
 
   return {
-    title: baseTitle, // becomes "Store Name in Area, City | Kasi Flavors" via root template
+    title: baseTitle,
     description: metaDescription,
     alternates: {
       canonical: urlPath,
@@ -65,14 +66,11 @@ export async function generateMetadata(
       title: `${baseTitle} | Kasi Flavors`,
       description: metaDescription,
       url: urlPath,
-      // If you later add a store hero image, plug it in here:
-      // images: [{ url: store.heroImageUrl, width: 1200, height: 630, alt: `${name} in ${locationLabel} on Kasi Flavors` }],
     },
     twitter: {
       card: "summary_large_image",
       title: `${baseTitle} | Kasi Flavors`,
       description: metaDescription,
-      // images: store.heroImageUrl ? [store.heroImageUrl] : undefined,
     },
     robots: {
       index: true,
@@ -80,9 +78,9 @@ export async function generateMetadata(
       googleBot: {
         index: true,
         follow: true,
-        'max-image-preview': "large",
-        'max-snippet': -1,
-        'max-video-preview': -1,
+        "max-image-preview": "large",
+        "max-snippet": -1,
+        "max-video-preview": -1,
       },
     },
   };
@@ -94,17 +92,23 @@ type StorePageProps = {
 
 export default async function StorePage({ params }: StorePageProps) {
   const { slug } = await params;
-  
+
   const store = await prisma.store.findUnique({
     where: { slug },
   });
 
   if (!store) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 dark:bg-slate-950">
-        <p className="text-sm text-slate-600 dark:text-slate-300">
-          Store not found.
-        </p>
+      <main className="flex min-h-screen items-center justify-center bg-kasi-cream px-4">
+        <div className="rounded-3xl border border-black/10 bg-white p-8 text-center shadow-sm">
+          <p className="text-4xl">🍔</p>
+          <h1 className="mt-4 text-2xl font-black text-kasi-black">
+            Store not found
+          </h1>
+          <p className="mt-2 text-sm font-medium text-black/60">
+            This kasi food spot could not be found.
+          </p>
+        </div>
       </main>
     );
   }
@@ -114,28 +118,74 @@ export default async function StorePage({ params }: StorePageProps) {
     orderBy: { createdAt: "asc" },
   });
 
-  const mappedProducts = products.map((p) => ({
-    id: p.id,
-    name: p.name,
-    description: p.description ?? undefined,
-    priceCents: p.priceCents,
-    imageUrl: p.imageUrl ?? undefined,
-    isAvailable: p.isAvailable,
-  }));
+  const storeAny = store as any;
+
+  const mappedProducts = products.map((p) => {
+    let price = p.priceCents;
+
+    if ((p as any).priceAdjustmentEnabled && (p as any).priceAdjustmentPercent) {
+      price = applyPriceAdjustment(
+        price,
+        (p as any).priceAdjustmentEnabled,
+        (p as any).priceAdjustmentPercent
+      );
+    }
+
+    if (
+      storeAny.priceAdjustmentEnabled &&
+      storeAny.priceAdjustmentPercent !== 0
+    ) {
+      price = applyPriceAdjustment(
+        price,
+        storeAny.priceAdjustmentEnabled,
+        storeAny.priceAdjustmentPercent
+      );
+    }
+
+    return {
+      id: p.id,
+      name: p.name,
+      description: p.description ?? undefined,
+      priceCents: price,
+      imageUrl: p.imageUrl ?? undefined,
+      isAvailable: p.isAvailable,
+    };
+  });
 
   return (
-    <main className="min-h-screen bg-slate-50 pb-20 dark:bg-slate-950">
+    <main className="min-h-screen bg-kasi-cream pb-28">
       <StoreHeader
         name={store.name}
         area={store.area}
         city={store.city}
         isOpen={store.isOpen}
         avgPrepTimeMinutes={store.avgPrepTimeMinutes}
+        priceAdjustmentEnabled={storeAny.priceAdjustmentEnabled}
+        priceAdjustmentPercent={storeAny.priceAdjustmentPercent}
       />
 
-      <div className="mx-auto max-w-4xl px-4 py-4 sm:px-6">
+      <section className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
+        <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-black uppercase tracking-wide text-street-orange">
+              Full menu
+            </p>
+            <h2 className="text-3xl font-black tracking-tight text-kasi-black">
+              Choose your meal
+            </h2>
+            <p className="mt-1 text-sm font-medium text-black/55">
+              Add your favourites to cart and checkout when ready.
+            </p>
+          </div>
+
+          <div className="rounded-full bg-kasi-black px-4 py-2 text-xs font-black uppercase tracking-wide text-white">
+            {mappedProducts.length}{" "}
+            {mappedProducts.length === 1 ? "item" : "items"} available
+          </div>
+        </div>
+
         <StoreMenuClient storeSlug={store.slug} products={mappedProducts} />
-      </div>
+      </section>
     </main>
   );
 }

@@ -4,29 +4,89 @@ export default function Footer() {
   const currentYear = new Date().getFullYear();
 
   return (
-    <footer className="border-t border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-      <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6 lg:px-8">
-        <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+    <footer className="border-t border-black/10 bg-kasi-black text-white">
+      {/* CTA strip */}
+      <div className="border-b border-white/10">
+        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-8 sm:px-6 md:flex-row md:items-center md:justify-between lg:px-8">
+          <div>
+            <p className="text-sm font-black uppercase tracking-wide text-golden-yellow">
+              Hungry?
+            </p>
+            <h2 className="mt-1 text-3xl font-black tracking-tight">
+              Skip the queue.{" "}
+              <span className="text-kasi-green">Order online.</span>
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm font-medium text-white/65">
+              Browse local kasi food spots, place your order, and collect or get
+              delivery where available.
+            </p>
+          </div>
+
+          <Link
+            href="/"
+            className="inline-flex items-center justify-center rounded-full bg-street-orange px-6 py-3 text-sm font-black text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-kasi-green"
+          >
+            Browse stores
+          </Link>
+        </div>
+      </div>
+
+      <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+        <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
           {/* Brand */}
           <div>
-            <h3 className="text-lg font-bold text-slate-900 dark:text-slate-50">
-              Kasi Flavors
-            </h3>
-            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-              Order authentic kasi cuisine from local spots near you.
+            <Link href="/" className="inline-flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border-2 border-white bg-white text-lg font-black text-kasi-black">
+                KF
+              </div>
+
+              <div className="leading-none">
+                <span className="block text-xl font-black tracking-tight text-kasi-green">
+                  Kasi
+                </span>
+                <span className="-mt-0.5 block text-lg font-black tracking-tight text-golden-yellow">
+                  Flavors
+                </span>
+              </div>
+            </Link>
+
+            <p className="mt-4 text-sm font-medium leading-6 text-white/65">
+              Real flavors. Real kasi. Built to help local township food
+              businesses serve more customers online.
             </p>
+
+            <div className="mt-5 flex flex-wrap gap-2">
+              <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-black uppercase tracking-wide text-white/75">
+                🍟 Kota
+              </span>
+              <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-black uppercase tracking-wide text-white/75">
+                🍔 Burgers
+              </span>
+              <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-black uppercase tracking-wide text-white/75">
+                🌶️ Kasi food
+              </span>
+            </div>
           </div>
 
           {/* Quick Links */}
           <div>
-            <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+            <h4 className="text-sm font-black uppercase tracking-wide text-golden-yellow">
               Quick Links
             </h4>
-            <ul className="mt-4 space-y-2">
+
+            <ul className="mt-4 space-y-3">
+              <li>
+                <Link
+                  href="/become-a-partner"
+                  className="text-sm font-semibold text-white/65 transition hover:text-kasi-green"
+                >
+                  List your store
+                </Link>
+              </li>
               <li>
                 <Link
                   href="/"
-                  className="text-sm text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-50"
+                  className="text-sm font-semibold text-white/65 transition hover:text-kasi-green"
                 >
                   Browse Stores
                 </Link>
@@ -34,7 +94,7 @@ export default function Footer() {
               <li>
                 <Link
                   href="/orders"
-                  className="text-sm text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-50"
+                  className="text-sm font-semibold text-white/65 transition hover:text-kasi-green"
                 >
                   My Orders
                 </Link>
@@ -42,9 +102,17 @@ export default function Footer() {
               <li>
                 <Link
                   href="/track"
-                  className="text-sm text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-50"
+                  className="text-sm font-semibold text-white/65 transition hover:text-kasi-green"
                 >
                   Track Order
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/owner-application"
+                  className="text-sm font-semibold text-white/65 transition hover:text-kasi-green"
+                >
+                  Open a Store
                 </Link>
               </li>
             </ul>
@@ -52,14 +120,15 @@ export default function Footer() {
 
           {/* Support */}
           <div>
-            <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+            <h4 className="text-sm font-black uppercase tracking-wide text-golden-yellow">
               Support
             </h4>
-            <ul className="mt-4 space-y-2">
+
+            <ul className="mt-4 space-y-3">
               <li>
                 <Link
                   href="/privacy"
-                  className="text-sm text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-50"
+                  className="text-sm font-semibold text-white/65 transition hover:text-kasi-green"
                 >
                   Privacy Policy
                 </Link>
@@ -67,9 +136,9 @@ export default function Footer() {
               <li>
                 <a
                   href="mailto:support@kasiflavors.co.za"
-                  className="text-sm text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-50"
+                  className="text-sm font-semibold text-white/65 transition hover:text-kasi-green"
                 >
-                  Contact Us
+                  support@kasiflavors.co.za
                 </a>
               </li>
               <li>
@@ -77,94 +146,72 @@ export default function Footer() {
                   href="https://wa.me/27701234567"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-sm text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-50"
+                  className="text-sm font-semibold text-white/65 transition hover:text-kasi-green"
                 >
-                  WhatsApp
+                  WhatsApp us
                 </a>
               </li>
             </ul>
           </div>
 
-          {/* Info */}
+          {/* About */}
           <div>
-            <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-              About
+            <h4 className="text-sm font-black uppercase tracking-wide text-golden-yellow">
+              Kasi Born
             </h4>
-            <p className="mt-4 text-sm text-slate-600 dark:text-slate-400">
-              Supporting local kasi kitchens and township food culture across
-              South Africa.
+
+            <p className="mt-4 text-sm font-medium leading-6 text-white/65">
+              Supporting local kasi kitchens, kota spots, fast food sellers, and
+              township food culture across South Africa.
             </p>
+
+            <div className="mt-5 rounded-3xl border border-white/10 bg-white/10 p-4">
+              <p className="text-sm font-black text-white">
+                Fast & easy ordering
+              </p>
+              <p className="mt-1 text-xs font-medium leading-5 text-white/60">
+                Customers order online. Stores prepare. Everyone saves time.
+              </p>
+            </div>
           </div>
         </div>
 
         {/* Bottom */}
-        <div className="mt-12 border-t border-slate-200 pt-8 dark:border-slate-800">
+        <div className="mt-12 border-t border-white/10 pt-8">
           <div className="flex flex-col items-center justify-between gap-4 sm:flex-row">
-            <p className="text-sm text-slate-600 dark:text-slate-400">
+            <p className="text-sm font-medium text-white/55">
               © {currentYear} Kasi Flavors. All rights reserved.
             </p>
-            <div className="flex gap-6">
+
+            <div className="flex items-center gap-3">
               <a
                 href="https://facebook.com"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white/70 transition hover:bg-kasi-green hover:text-white"
                 aria-label="Facebook"
               >
-                <svg
-                  className="h-5 w-5"
-                  fill="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path d="M9 8h-3v4h3v12h5v-12h3.642l.358-4h-4v-1.667c0-.955.192-1.333 1.115-1.333H16V2.169a13.987 13.987 0 00-1.934-.111C9.339 2 6 4.262 6 8.227V12H3v4h3v12h5V16h4l.359-4h-4.359V9.809c0-.955.192-1.333 1.116-1.333H16V8z" />
-                </svg>
+                <span className="text-sm font-black">f</span>
               </a>
+
               <a
                 href="https://twitter.com"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white/70 transition hover:bg-kasi-green hover:text-white"
                 aria-label="Twitter"
               >
-                <svg
-                  className="h-5 w-5"
-                  fill="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path d="M23 3a10.9 10.9 0 01-3.14 1.53 4.48 4.48 0 00-7.86 3v1A10.66 10.66 0 013 4s-4 9 5 13a11.64 11.64 0 01-7 2s9 5 20 5a9.5 9.5 0 00-9-5.5c4.75 2.25 7-7 7-7a10.6 10.6 0 01-9-5.5z" />
-                </svg>
+                <span className="text-sm font-black">X</span>
               </a>
+
               <a
                 href="https://instagram.com"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white/70 transition hover:bg-kasi-green hover:text-white"
                 aria-label="Instagram"
               >
-                <svg
-                  className="h-5 w-5"
-                  fill="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <rect
-                    x="2"
-                    y="2"
-                    width="20"
-                    height="20"
-                    rx="5"
-                    ry="5"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  />
-                  <path
-                    d="M16 11.37A4 4 0 1112.63 8 4 4 0 0116 11.37z"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  />
-                  <circle cx="17.5" cy="6.5" r="1.5" fill="currentColor" />
-                </svg>
+                <span className="text-sm font-black">IG</span>
               </a>
             </div>
           </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { formatMoney } from "@/lib/money";
 import { getRequiredTopupCents } from "@/lib/billing/topUp";
@@ -16,9 +17,11 @@ export function OwnerTopupCheckout({
   requiredTopupCents,
 }: Props) {
   const router = useRouter();
+
   const [amountInput, setAmountInput] = React.useState(
-    (requiredTopupCents / 100).toFixed(2),
+    (requiredTopupCents / 100).toFixed(2)
   );
+
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -39,9 +42,7 @@ export function OwnerTopupCheckout({
 
     if (amountCents < minCents) {
       setError(
-        `Minimum top up is ${formatMoney(
-          minCents,
-        )}. Please increase the amount.`,
+        `Minimum top up is ${formatMoney(minCents)}. Please increase the amount.`
       );
       return;
     }
@@ -53,11 +54,15 @@ export function OwnerTopupCheckout({
 
       if (result?.redirectUrl) {
         router.push(result.redirectUrl);
-      } else {
-        setError("Unable to start checkout. Please try again.");
+        return;
       }
+
+      setError("Unable to start checkout. Please try again.");
     } catch (err) {
-      console.error(err);
+      if (process.env.NODE_ENV === "development") {
+        console.error(err);
+      }
+
       setError("Something went wrong. Please try again.");
     } finally {
       setSubmitting(false);
@@ -65,27 +70,30 @@ export function OwnerTopupCheckout({
   };
 
   return (
-    <form onSubmit={onSubmit} className="mt-6 space-y-4">
+    <form onSubmit={onSubmit} className="mt-6 space-y-5">
       <div>
-        <label className="text-xs font-medium text-slate-700 dark:text-slate-200">
-          Top up amount (ZAR)
+        <label className="mb-1.5 block text-xs font-black uppercase tracking-wide text-black/55">
+          Top up amount ZAR
         </label>
-        <div className="mt-1 flex items-center gap-2">
-          <span className="rounded-md border border-slate-300 bg-slate-50 px-2 py-1 text-xs font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+
+        <div className="flex items-center gap-2">
+          <span className="inline-flex h-12 items-center rounded-2xl border-2 border-black/10 bg-kasi-black px-4 text-sm font-black text-white">
             R
           </span>
+
           <input
             type="number"
             step="0.01"
             min={requiredTopupCents / 100}
             value={amountInput}
             onChange={(e) => setAmountInput(e.target.value)}
-            className="flex-1 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-500/40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+            className="h-12 flex-1 rounded-2xl border-2 border-black/10 bg-kasi-cream px-4 text-sm font-black text-kasi-black outline-none transition placeholder:text-black/35 focus:border-kasi-green focus:bg-white focus:ring-4 focus:ring-kasi-green/10"
           />
         </div>
-        <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+
+        <p className="mt-2 text-xs font-medium text-black/55">
           Minimum top up:{" "}
-          <span className="font-semibold">
+          <span className="font-black text-kasi-black">
             {formatMoney(requiredTopupCents)}
           </span>
           .
@@ -93,15 +101,35 @@ export function OwnerTopupCheckout({
       </div>
 
       {error && (
-        <p className="text-xs text-red-600 dark:text-red-400">{error}</p>
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-600">
+          {error}
+        </div>
       )}
+
+      <div className="rounded-[1.5rem] bg-kasi-cream p-4">
+        <p className="text-xs font-black uppercase tracking-wide text-kasi-black">
+          Before you continue
+        </p>
+
+        <p className="mt-1 text-xs font-medium leading-5 text-black/60">
+          You will be redirected to the payment checkout page. Once payment is
+          confirmed, your store balance should update.
+        </p>
+      </div>
 
       <button
         type="submit"
         disabled={submitting}
-        className="inline-flex w-full items-center justify-center rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+        className="inline-flex w-full items-center justify-center rounded-full bg-kasi-green px-5 py-4 text-sm font-black text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-street-orange disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {submitting ? "Starting checkout..." : "Proceed to payment"}
+        {submitting ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Starting checkout...
+          </>
+        ) : (
+          "Proceed to payment"
+        )}
       </button>
     </form>
   );
