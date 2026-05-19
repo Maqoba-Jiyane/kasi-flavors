@@ -44,7 +44,6 @@ function minutesBetween(a: Date, b: Date) {
   return (b.getTime() - a.getTime()) / 60000;
 }
 
-// Compute start date based on range param
 function getRangeStart(range: RangeOption, now: Date): Date | null {
   switch (range) {
     case "7d":
@@ -71,13 +70,21 @@ function humanizeStatus(status: Order["status"]) {
 
 type OrderWithItems = Order & { items: OrderItem[] };
 
-function sumCents(orders: OrderWithItems[], pick: (o: OrderWithItems) => number) {
+function sumCents(
+  orders: OrderWithItems[],
+  pick: (o: OrderWithItems) => number
+) {
   return orders.reduce((sum, o) => sum + pick(o), 0);
 }
 
 function avgMinutesFromDates(pairs: Array<{ start: Date; end: Date }>) {
   if (pairs.length === 0) return 0;
-  const total = pairs.reduce((sum, p) => sum + minutesBetween(p.start, p.end), 0);
+
+  const total = pairs.reduce(
+    (sum, p) => sum + minutesBetween(p.start, p.end),
+    0
+  );
+
   return total / pairs.length;
 }
 
@@ -89,7 +96,7 @@ type Bucket = {
   completedRevenueCents: number;
   feesPaidCents: number;
   feesOutstandingCents: number;
-  avgFulfilmentMins: number; // createdAt -> completedAt (completed only)
+  avgFulfilmentMins: number;
 };
 
 function buildBucket(label: string, orders: OrderWithItems[]): Bucket {
@@ -99,15 +106,24 @@ function buildBucket(label: string, orders: OrderWithItems[]): Bucket {
   const completedRevenueCents = sumCents(completed, (o) => o.totalCents);
 
   const feesPaidCents = completed.reduce((sum, o) => {
-    // if platformFeeCents might be null in your model, guard:
-    const fee = (o as unknown as { platformFeeCents?: number | null }).platformFeeCents ?? 0;
-    const paid = (o as unknown as { platformFeePaid?: boolean | null }).platformFeePaid ?? false;
+    const fee =
+      (o as unknown as { platformFeeCents?: number | null }).platformFeeCents ??
+      0;
+    const paid =
+      (o as unknown as { platformFeePaid?: boolean | null }).platformFeePaid ??
+      false;
+
     return sum + (paid ? fee : 0);
   }, 0);
 
   const feesOutstandingCents = completed.reduce((sum, o) => {
-    const fee = (o as unknown as { platformFeeCents?: number | null }).platformFeeCents ?? 0;
-    const paid = (o as unknown as { platformFeePaid?: boolean | null }).platformFeePaid ?? false;
+    const fee =
+      (o as unknown as { platformFeeCents?: number | null }).platformFeeCents ??
+      0;
+    const paid =
+      (o as unknown as { platformFeePaid?: boolean | null }).platformFeePaid ??
+      false;
+
     return sum + (!paid ? fee : 0);
   }, 0);
 
@@ -129,7 +145,9 @@ function buildBucket(label: string, orders: OrderWithItems[]): Bucket {
   };
 }
 
-export default async function StoreAnalyticsPage({ searchParams }: StoreAnalyticsPageProps) {
+export default async function StoreAnalyticsPage({
+  searchParams,
+}: StoreAnalyticsPageProps) {
   const user = await getCurrentUser();
   assertRole(user, ["STORE_OWNER"]);
 
@@ -140,18 +158,24 @@ export default async function StoreAnalyticsPage({ searchParams }: StoreAnalytic
 
   if (!store) {
     return (
-      <main className="min-h-screen bg-slate-50 px-4 py-6 dark:bg-slate-950">
-        <div className="mx-auto max-w-3xl rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700 shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
-          <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-50">
+      <main className="min-h-screen bg-kasi-cream px-4 py-6">
+        <div className="mx-auto max-w-3xl rounded-[2rem] border border-black/10 bg-white p-6 text-sm shadow-sm">
+          <p className="text-xs font-black uppercase tracking-wide text-street-orange">
+            Store setup
+          </p>
+
+          <h1 className="mt-2 text-2xl font-black text-kasi-black">
             No store linked to this account
           </h1>
-          <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+
+          <p className="mt-2 text-sm font-medium leading-6 text-black/60">
             This owner account does not have a store configured yet.
           </p>
-          <div className="mt-3">
+
+          <div className="mt-4">
             <Link
               href="/owner/store/overview"
-              className="inline-flex items-center rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+              className="inline-flex rounded-full bg-kasi-green px-4 py-2 text-xs font-black uppercase tracking-wide text-white transition hover:bg-street-orange"
             >
               Back to overview →
             </Link>
@@ -163,7 +187,12 @@ export default async function StoreAnalyticsPage({ searchParams }: StoreAnalytic
 
   const now = new Date();
   const { range } = await searchParams;
-  const rangeParam = (range as RangeOption | undefined) ?? "30d";
+
+  const rangeParam: RangeOption =
+    range === "7d" || range === "30d" || range === "all"
+      ? range
+      : "30d";
+
   const rangeStart = getRangeStart(rangeParam, now);
 
   const where: Prisma.OrderWhereInput = {
@@ -180,7 +209,6 @@ export default async function StoreAnalyticsPage({ searchParams }: StoreAnalytic
 
   const totalOrders = orders.length;
 
-  // Outcomes
   const completedOrders = orders.filter((o) => o.status === "COMPLETED");
   const cancelledOrders = orders.filter((o) => o.status === "CANCELLED");
 
@@ -190,37 +218,44 @@ export default async function StoreAnalyticsPage({ searchParams }: StoreAnalytic
   const completionRate = totalOrders > 0 ? completedCount / totalOrders : 0;
   const cancelRate = totalOrders > 0 ? cancelledCount / totalOrders : 0;
 
-  // Completed revenue only (gross)
   const completedRevenueCents = sumCents(completedOrders, (o) => o.totalCents);
 
-  // Fees paid vs outstanding (based on platformFeePaid + platformFeeCents)
   const feesPaidCents = completedOrders.reduce((sum, o) => {
-    const fee = (o as unknown as { platformFeeCents?: number | null }).platformFeeCents ?? 0;
-    const paid = (o as unknown as { platformFeePaid?: boolean | null }).platformFeePaid ?? false;
+    const fee =
+      (o as unknown as { platformFeeCents?: number | null }).platformFeeCents ??
+      0;
+    const paid =
+      (o as unknown as { platformFeePaid?: boolean | null }).platformFeePaid ??
+      false;
+
     return sum + (paid ? fee : 0);
   }, 0);
 
   const feesOutstandingCents = completedOrders.reduce((sum, o) => {
-    const fee = (o as unknown as { platformFeeCents?: number | null }).platformFeeCents ?? 0;
-    const paid = (o as unknown as { platformFeePaid?: boolean | null }).platformFeePaid ?? false;
+    const fee =
+      (o as unknown as { platformFeeCents?: number | null }).platformFeeCents ??
+      0;
+    const paid =
+      (o as unknown as { platformFeePaid?: boolean | null }).platformFeePaid ??
+      false;
+
     return sum + (!paid ? fee : 0);
   }, 0);
 
   const netPaidCents = completedRevenueCents - feesPaidCents;
 
-  // Fulfilment time (createdAt -> completedAt), completed only
   const fulfilPairs = completedOrders
     .filter((o) => o.completedAt)
     .map((o) => ({ start: o.createdAt, end: o.completedAt! }));
+
   const avgFulfilmentMins = avgMinutesFromDates(fulfilPairs);
 
-  // Ready ETA (estimate) (createdAt -> estimatedReadyAt), where estimatedReadyAt exists
   const readyPairs = orders
     .filter((o) => o.estimatedReadyAt)
     .map((o) => ({ start: o.createdAt, end: o.estimatedReadyAt! }));
+
   const avgReadyEtaMins = avgMinutesFromDates(readyPairs);
 
-  // Active pipeline counts (actionability)
   const ACTIVE_PIPELINE: Order["status"][] = [
     "PENDING",
     "ACCEPTED",
@@ -228,49 +263,61 @@ export default async function StoreAnalyticsPage({ searchParams }: StoreAnalytic
     "READY_FOR_COLLECTION",
     "OUT_FOR_DELIVERY",
   ];
+
   const activeNow = orders.filter((o) => ACTIVE_PIPELINE.includes(o.status));
 
-  // "Stuck" heuristics (simple MVP)
-  const STUCK_KITCHEN_MIN = 30; // tweak later
-  const STUCK_DELIVERY_MIN = 45; // tweak later
+  const STUCK_KITCHEN_MIN = 30;
+  const STUCK_DELIVERY_MIN = 45;
 
   const nowMs = now.getTime();
 
   const stuckKitchen = activeNow.filter((o) => {
-    if (!["PENDING", "ACCEPTED", "IN_PREPARATION"].includes(o.status)) return false;
+    if (!["PENDING", "ACCEPTED", "IN_PREPARATION"].includes(o.status)) {
+      return false;
+    }
+
     const ageMin = (nowMs - o.createdAt.getTime()) / 60000;
     return ageMin >= STUCK_KITCHEN_MIN;
   });
 
   const stuckDelivery = activeNow.filter((o) => {
     if (o.status !== "OUT_FOR_DELIVERY") return false;
+
     const ageMin = (nowMs - o.createdAt.getTime()) / 60000;
     return ageMin >= STUCK_DELIVERY_MIN;
   });
 
-  // Fulfilment split: DELIVERY vs COLLECTION
   const deliveryOrders = orders.filter((o) => o.fulfilmentType === "DELIVERY");
-  const collectionOrders = orders.filter((o) => o.fulfilmentType === "COLLECTION");
+  const collectionOrders = orders.filter(
+    (o) => o.fulfilmentType === "COLLECTION"
+  );
 
   const deliveryBucket = buildBucket("Delivery", deliveryOrders);
   const collectionBucket = buildBucket("Collection", collectionOrders);
 
-  // Payment split: COD vs ONLINE
-  // Your code elsewhere uses "ONLINE_PAYMENT" and "CASH_ON_DELIVERY"
-  const codOrders = orders.filter((o) => (o as any).paymentMethod === "CASH_ON_DELIVERY");
-  const onlineOrders = orders.filter((o) => (o as any).paymentMethod === "ONLINE_PAYMENT");
+  const codOrders = orders.filter(
+    (o) => (o as any).paymentMethod === "CASH_ON_DELIVERY"
+  );
+
+  const onlineOrders = orders.filter(
+    (o) => (o as any).paymentMethod === "ONLINE_PAYMENT"
+  );
 
   const codBucket = buildBucket("Cash on delivery", codOrders);
   const onlineBucket = buildBucket("Online payment", onlineOrders);
 
   const codShareOrders = totalOrders > 0 ? codOrders.length / totalOrders : 0;
+
   const codCompletedRevenueCents = sumCents(
     codOrders.filter((o) => o.status === "COMPLETED"),
-    (o) => o.totalCents,
+    (o) => o.totalCents
   );
-  const codShareRevenue = completedRevenueCents > 0 ? codCompletedRevenueCents / completedRevenueCents : 0;
 
-  // Status breakdown
+  const codShareRevenue =
+    completedRevenueCents > 0
+      ? codCompletedRevenueCents / completedRevenueCents
+      : 0;
+
   const statusCounts: Record<Order["status"], number> = {
     PENDING: 0,
     ACCEPTED: 0,
@@ -280,51 +327,85 @@ export default async function StoreAnalyticsPage({ searchParams }: StoreAnalytic
     COMPLETED: 0,
     CANCELLED: 0,
   };
+
   for (const o of orders) statusCounts[o.status] += 1;
 
   const activeStatuses = (Object.keys(statusCounts) as Order["status"][]).filter(
-    (s) => statusCounts[s] > 0,
+    (s) => statusCounts[s] > 0
   );
-  const maxStatusCount =
-    activeStatuses.length > 0 ? Math.max(...activeStatuses.map((s) => statusCounts[s])) : 0;
 
-  // Orders per day trend (count + completed revenue)
-  type DayAgg = { date: string; count: number; completedRevenueCents: number };
+  const maxStatusCount =
+    activeStatuses.length > 0
+      ? Math.max(...activeStatuses.map((s) => statusCounts[s]))
+      : 0;
+
+  type DayAgg = {
+    date: string;
+    count: number;
+    completedRevenueCents: number;
+  };
+
   const dayMap = new Map<string, DayAgg>();
 
   for (const o of orders) {
-    const key = o.createdAt.toISOString().slice(0, 10); // YYYY-MM-DD
-    const existing = dayMap.get(key) ?? { date: key, count: 0, completedRevenueCents: 0 };
+    const key = o.createdAt.toISOString().slice(0, 10);
+    const existing = dayMap.get(key) ?? {
+      date: key,
+      count: 0,
+      completedRevenueCents: 0,
+    };
+
     existing.count += 1;
-    if (o.status === "COMPLETED") existing.completedRevenueCents += o.totalCents;
+
+    if (o.status === "COMPLETED") {
+      existing.completedRevenueCents += o.totalCents;
+    }
+
     dayMap.set(key, existing);
   }
 
-  const daily = Array.from(dayMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+  const daily = Array.from(dayMap.values()).sort((a, b) =>
+    a.date.localeCompare(b.date)
+  );
 
-  const recentDaily =
-    rangeParam === "7d"
-      ? daily.slice(-7)
-      : daily.slice(-14); // show last 14 for 30d/all
+  const recentDaily = rangeParam === "7d" ? daily.slice(-7) : daily.slice(-14);
 
-  const maxDailyCount = recentDaily.length > 0 ? Math.max(...recentDaily.map((d) => d.count)) : 0;
+  const maxDailyCount =
+    recentDaily.length > 0 ? Math.max(...recentDaily.map((d) => d.count)) : 0;
 
   const busiest =
-    recentDaily.length > 0 ? [...recentDaily].sort((a, b) => b.count - a.count)[0] : null;
-  const quietest =
-    recentDaily.length > 0 ? [...recentDaily].sort((a, b) => a.count - b.count)[0] : null;
+    recentDaily.length > 0
+      ? [...recentDaily].sort((a, b) => b.count - a.count)[0]
+      : null;
 
-  // Top products (by revenue first; more useful than qty-only)
-  type ProductAgg = { name: string; quantity: number; revenueCents: number };
+  const quietest =
+    recentDaily.length > 0
+      ? [...recentDaily].sort((a, b) => a.count - b.count)[0]
+      : null;
+
+  type ProductAgg = {
+    name: string;
+    quantity: number;
+    revenueCents: number;
+  };
+
   const productMap = new Map<string, ProductAgg>();
 
   for (const o of orders) {
     for (const item of o.items) {
       const key = item.name;
-      const existing = productMap.get(key) ?? { name: item.name, quantity: 0, revenueCents: 0 };
+      const existing = productMap.get(key) ?? {
+        name: item.name,
+        quantity: 0,
+        revenueCents: 0,
+      };
+
       existing.quantity += item.quantity;
-      // If order isn't completed, you can decide whether to include. For now: include completed only for "top products"
-      if (o.status === "COMPLETED") existing.revenueCents += item.totalCents;
+
+      if (o.status === "COMPLETED") {
+        existing.revenueCents += item.totalCents;
+      }
+
       productMap.set(key, existing);
     }
   }
@@ -335,7 +416,11 @@ export default async function StoreAnalyticsPage({ searchParams }: StoreAnalytic
     .slice(0, 8);
 
   const rangeLabel =
-    rangeParam === "7d" ? "Last 7 days" : rangeParam === "30d" ? "Last 30 days" : "All time";
+    rangeParam === "7d"
+      ? "Last 7 days"
+      : rangeParam === "30d"
+        ? "Last 30 days"
+        : "All time";
 
   const niceDate = (isoYYYYMMDD: string) =>
     new Date(`${isoYYYYMMDD}T00:00:00`).toLocaleDateString("en-ZA", {
@@ -344,39 +429,60 @@ export default async function StoreAnalyticsPage({ searchParams }: StoreAnalytic
     });
 
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-6 dark:bg-slate-950">
-      <div className="mx-auto max-w-5xl space-y-5">
-        {/* Header + Range selector */}
-        <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-50">Analytics</h1>
-            <p className="text-xs text-slate-500 dark:text-slate-300">
+    <main className="py-2">
+      <div className="space-y-5">
+        <header className="grid gap-4 lg:grid-cols-[1fr_auto]">
+          <div className="rounded-[2rem] border border-black/10 bg-white p-5 shadow-sm">
+            <p className="text-xs font-black uppercase tracking-wide text-street-orange">
+              Analytics
+            </p>
+
+            <h1 className="mt-2 text-3xl font-black tracking-tight text-kasi-black">
+              Store analytics
+            </h1>
+
+            <p className="mt-2 text-sm font-medium text-black/60">
               {rangeLabel} for{" "}
-              <span className="font-medium text-slate-800 dark:text-slate-100">{store.name}</span>.
+              <span className="font-black text-kasi-black">{store.name}</span>.
             </p>
           </div>
 
-          <div className="flex items-center gap-2 text-[11px]">
-            <span className="text-slate-500 dark:text-slate-400">Range:</span>
-            <RangeChip href="/owner/store/analytics?range=7d" active={rangeParam === "7d"}>
+          <div className="flex flex-wrap items-center gap-2 rounded-[2rem] border border-black/10 bg-white p-4 shadow-sm">
+            <span className="text-xs font-black uppercase tracking-wide text-black/45">
+              Range:
+            </span>
+
+            <RangeChip
+              href="/owner/store/analytics?range=7d"
+              active={rangeParam === "7d"}
+            >
               7 days
             </RangeChip>
-            <RangeChip href="/owner/store/analytics?range=30d" active={rangeParam === "30d"}>
+
+            <RangeChip
+              href="/owner/store/analytics?range=30d"
+              active={rangeParam === "30d"}
+            >
               30 days
             </RangeChip>
-            <RangeChip href="/owner/store/analytics?range=all" active={rangeParam === "all"}>
+
+            <RangeChip
+              href="/owner/store/analytics?range=all"
+              active={rangeParam === "all"}
+            >
               All time
             </RangeChip>
           </div>
         </header>
 
-        {/* Summary cards (trustworthy numbers) */}
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <SummaryCard
             label="Completed revenue"
             value={formatMoney(completedRevenueCents)}
             helper={`${completedCount} completed · excludes pending/cancelled`}
+            tone="success"
           />
+
           <SummaryCard
             label="Fees paid"
             value={formatMoney(feesPaidCents)}
@@ -386,11 +492,14 @@ export default async function StoreAnalyticsPage({ searchParams }: StoreAnalytic
                 : "No outstanding fees"
             }
           />
+
           <SummaryCard
-            label="Net revenue (paid)"
+            label="Net revenue"
             value={formatMoney(netPaidCents)}
             helper="Completed revenue minus fees paid"
+            tone="success"
           />
+
           <SummaryCard
             label="Completion rate"
             value={totalOrders > 0 ? pct(completionRate) : "—"}
@@ -398,23 +507,27 @@ export default async function StoreAnalyticsPage({ searchParams }: StoreAnalytic
           />
         </section>
 
-        {/* Operational health (actionable) */}
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <SummaryCard
             label="Active orders now"
             value={String(activeNow.length)}
             helper="Pending / accepted / in prep / ready / out"
           />
+
           <SummaryCard
             label="Stuck in kitchen"
             value={String(stuckKitchen.length)}
             helper={`≥ ${STUCK_KITCHEN_MIN} min in pending/accepted/in prep`}
+            tone={stuckKitchen.length > 0 ? "danger" : "default"}
           />
+
           <SummaryCard
             label="Stuck on delivery"
             value={String(stuckDelivery.length)}
             helper={`≥ ${STUCK_DELIVERY_MIN} min out for delivery`}
+            tone={stuckDelivery.length > 0 ? "danger" : "default"}
           />
+
           <SummaryCard
             label="COD share"
             value={totalOrders > 0 ? pct(codShareOrders) : "—"}
@@ -426,155 +539,152 @@ export default async function StoreAnalyticsPage({ searchParams }: StoreAnalytic
           />
         </section>
 
-        {/* Timing */}
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <SummaryCard
-            label="Avg fulfilment time"
-            value={completedCount > 0 ? `${Math.round(avgFulfilmentMins)} min` : "—"}
-            helper={completedCount > 0 ? `${completedCount} completed orders` : "No completed orders"}
+            label="Avg fulfilment"
+            value={
+              completedCount > 0 ? `${Math.round(avgFulfilmentMins)} min` : "—"
+            }
+            helper={
+              completedCount > 0
+                ? `${completedCount} completed orders`
+                : "No completed orders"
+            }
           />
+
           <SummaryCard
-            label="Avg ready ETA (estimate)"
-            value={readyPairs.length > 0 ? `${Math.round(avgReadyEtaMins)} min` : "—"}
-            helper={readyPairs.length > 0 ? `${readyPairs.length} orders with ETA` : "No ETA data"}
+            label="Avg ready ETA"
+            value={
+              readyPairs.length > 0 ? `${Math.round(avgReadyEtaMins)} min` : "—"
+            }
+            helper={
+              readyPairs.length > 0
+                ? `${readyPairs.length} orders with ETA`
+                : "No ETA data"
+            }
           />
+
           <SummaryCard
-            label="Delivery vs collection"
+            label="Delivery / Collection"
             value={`${deliveryOrders.length} / ${collectionOrders.length}`}
             helper="Delivery orders / Collection orders"
           />
+
           <SummaryCard
             label="Cancel rate"
             value={totalOrders > 0 ? pct(cancelRate) : "—"}
             helper={`${cancelledCount} cancelled`}
+            tone={cancelledCount > 0 ? "danger" : "default"}
           />
         </section>
 
-        {/* Fulfilment split */}
-        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <div className="flex items-start justify-between gap-2">
+        <section className="rounded-[2rem] border border-black/10 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+              <p className="text-xs font-black uppercase tracking-wide text-street-orange">
+                Fulfilment performance
+              </p>
+
+              <h2 className="mt-1 text-xl font-black text-kasi-black">
                 Fulfilment split
               </h2>
-              <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                Compare delivery vs collection performance and revenue (completed only).
+
+              <p className="mt-1 text-xs font-medium text-black/50">
+                Compare delivery vs collection performance and completed
+                revenue.
               </p>
             </div>
           </div>
 
-          <div className="mt-3 overflow-hidden rounded-lg border border-slate-100 text-xs dark:border-slate-800">
-            <table className="min-w-full divide-y divide-slate-100 dark:divide-slate-800">
-              <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500 dark:bg-slate-950/40 dark:text-slate-400">
-                <tr>
-                  <th className="px-3 py-2 text-left font-medium">Type</th>
-                  <th className="px-3 py-2 text-right font-medium">Orders</th>
-                  <th className="px-3 py-2 text-right font-medium">Completed</th>
-                  <th className="px-3 py-2 text-right font-medium">Completed revenue</th>
-                  <th className="px-3 py-2 text-right font-medium">Avg fulfilment</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
-                {[deliveryBucket, collectionBucket].map((b) => {
-                  const completedRate = b.orders > 0 ? b.completed / b.orders : 0;
-                  return (
-                    <tr key={b.label}>
-                      <td className="px-3 py-2 font-medium text-slate-900 dark:text-slate-100">
-                        {b.label}
-                      </td>
-                      <td className="px-3 py-2 text-right text-slate-700 dark:text-slate-200">
-                        {b.orders}
-                      </td>
-                      <td className="px-3 py-2 text-right text-slate-700 dark:text-slate-200">
-                        {b.completed} <span className="text-slate-400">({pct(completedRate)})</span>
-                      </td>
-                      <td className="px-3 py-2 text-right text-slate-700 dark:text-slate-200">
-                        {formatMoney(b.completedRevenueCents)}
-                      </td>
-                      <td className="px-3 py-2 text-right text-slate-700 dark:text-slate-200">
-                        {b.completed > 0 ? `${Math.round(b.avgFulfilmentMins)} min` : "—"}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <AnalyticsTable
+            columns={[
+              "Type",
+              "Orders",
+              "Completed",
+              "Completed revenue",
+              "Avg fulfilment",
+            ]}
+            rows={[deliveryBucket, collectionBucket].map((b) => {
+              const completedRate = b.orders > 0 ? b.completed / b.orders : 0;
+
+              return [
+                b.label,
+                String(b.orders),
+                `${b.completed} (${pct(completedRate)})`,
+                formatMoney(b.completedRevenueCents),
+                b.completed > 0
+                  ? `${Math.round(b.avgFulfilmentMins)} min`
+                  : "—",
+              ];
+            })}
+          />
         </section>
 
-        {/* Payment breakdown */}
-        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-            Payment breakdown
-          </h2>
-          <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-            Cash on delivery (COD) can increase delivery risk and cash handling. Track it.
+        <section className="rounded-[2rem] border border-black/10 bg-white p-5 shadow-sm">
+          <p className="text-xs font-black uppercase tracking-wide text-street-orange">
+            Payment behaviour
           </p>
 
-          <div className="mt-3 overflow-hidden rounded-lg border border-slate-100 text-xs dark:border-slate-800">
-            <table className="min-w-full divide-y divide-slate-100 dark:divide-slate-800">
-              <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500 dark:bg-slate-950/40 dark:text-slate-400">
-                <tr>
-                  <th className="px-3 py-2 text-left font-medium">Method</th>
-                  <th className="px-3 py-2 text-right font-medium">Orders</th>
-                  <th className="px-3 py-2 text-right font-medium">Completed</th>
-                  <th className="px-3 py-2 text-right font-medium">Completed revenue</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
-                {[codBucket, onlineBucket].map((b) => {
-                  const completedRate = b.orders > 0 ? b.completed / b.orders : 0;
-                  return (
-                    <tr key={b.label}>
-                      <td className="px-3 py-2 font-medium text-slate-900 dark:text-slate-100">
-                        {b.label}
-                      </td>
-                      <td className="px-3 py-2 text-right text-slate-700 dark:text-slate-200">
-                        {b.orders}
-                      </td>
-                      <td className="px-3 py-2 text-right text-slate-700 dark:text-slate-200">
-                        {b.completed} <span className="text-slate-400">({pct(completedRate)})</span>
-                      </td>
-                      <td className="px-3 py-2 text-right text-slate-700 dark:text-slate-200">
-                        {formatMoney(b.completedRevenueCents)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <h2 className="mt-1 text-xl font-black text-kasi-black">
+            Payment breakdown
+          </h2>
+
+          <p className="mt-1 text-xs font-medium text-black/50">
+            Cash on delivery can increase cash handling and delivery risk. Track
+            it carefully.
+          </p>
+
+          <AnalyticsTable
+            columns={["Method", "Orders", "Completed", "Completed revenue"]}
+            rows={[codBucket, onlineBucket].map((b) => {
+              const completedRate = b.orders > 0 ? b.completed / b.orders : 0;
+
+              return [
+                b.label,
+                String(b.orders),
+                `${b.completed} (${pct(completedRate)})`,
+                formatMoney(b.completedRevenueCents),
+              ];
+            })}
+          />
 
           {(onlineOrders.length === 0 || codOrders.length === 0) && (
-            <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+            <p className="mt-3 rounded-2xl bg-kasi-cream p-3 text-xs font-medium text-black/60">
               Tip: As you add more orders, this table becomes more useful.
             </p>
           )}
         </section>
 
-        {/* Trend: orders per day */}
-        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+        <section className="rounded-[2rem] border border-black/10 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Orders per day</h2>
-              <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                Quick view of order volume (and completed revenue) by day.
+              <p className="text-xs font-black uppercase tracking-wide text-street-orange">
+                Daily trend
+              </p>
+
+              <h2 className="mt-1 text-xl font-black text-kasi-black">
+                Orders per day
+              </h2>
+
+              <p className="mt-1 text-xs font-medium text-black/50">
+                Quick view of order volume and completed revenue by day.
               </p>
             </div>
 
-            <div className="text-[11px] text-slate-500 dark:text-slate-400">
+            <div className="text-xs font-medium text-black/55">
               {busiest ? (
                 <span className="mr-3">
                   Busiest:{" "}
-                  <span className="font-medium text-slate-800 dark:text-slate-100">
+                  <span className="font-black text-kasi-black">
                     {niceDate(busiest.date)} ({busiest.count})
                   </span>
                 </span>
               ) : null}
+
               {quietest ? (
                 <span>
                   Quietest:{" "}
-                  <span className="font-medium text-slate-800 dark:text-slate-100">
+                  <span className="font-black text-kasi-black">
                     {niceDate(quietest.date)} ({quietest.count})
                   </span>
                 </span>
@@ -583,31 +693,42 @@ export default async function StoreAnalyticsPage({ searchParams }: StoreAnalytic
           </div>
 
           {recentDaily.length === 0 ? (
-            <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">No orders in this range.</p>
+            <p className="mt-4 rounded-2xl bg-kasi-cream p-4 text-sm font-medium text-black/60">
+              No orders in this range.
+            </p>
           ) : (
-            <div className="mt-3 space-y-2 text-[11px]">
+            <div className="mt-4 space-y-3 text-xs">
               {recentDaily.map((d) => {
                 const widthPct =
-                  maxDailyCount > 0 ? Math.max(8, (d.count / maxDailyCount) * 100) : 0;
+                  maxDailyCount > 0
+                    ? Math.max(8, (d.count / maxDailyCount) * 100)
+                    : 0;
 
                 return (
-                  <div key={d.date} className="flex items-center gap-3">
-                    <div className="w-16 text-slate-600 dark:text-slate-300">{niceDate(d.date)}</div>
-                    <div className="flex-1">
-                      <div className="relative h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                  <div key={d.date} className="grid gap-2 sm:grid-cols-[80px_1fr_40px] sm:items-center">
+                    <div className="font-black uppercase tracking-wide text-black/50">
+                      {niceDate(d.date)}
+                    </div>
+
+                    <div>
+                      <div className="relative h-3 overflow-hidden rounded-full bg-kasi-cream">
                         <div
-                          className="absolute inset-y-0 left-0 rounded-full bg-sky-500 dark:bg-sky-400"
+                          className="absolute inset-y-0 left-0 rounded-full bg-kasi-green"
                           style={{ width: `${widthPct}%` }}
                         />
                       </div>
-                      <div className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">
+
+                      <div className="mt-1 text-[11px] font-medium text-black/50">
                         Completed revenue:{" "}
-                        <span className="font-medium text-slate-700 dark:text-slate-200">
+                        <span className="font-black text-kasi-black">
                           {formatMoney(d.completedRevenueCents)}
                         </span>
                       </div>
                     </div>
-                    <div className="w-8 text-right text-slate-700 dark:text-slate-200">{d.count}</div>
+
+                    <div className="text-right font-black text-kasi-black">
+                      {d.count}
+                    </div>
                   </div>
                 );
               })}
@@ -615,31 +736,37 @@ export default async function StoreAnalyticsPage({ searchParams }: StoreAnalytic
           )}
         </section>
 
-        {/* Status breakdown */}
-        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <div className="flex items-start justify-between gap-2">
+        <section className="rounded-[2rem] border border-black/10 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+              <p className="text-xs font-black uppercase tracking-wide text-street-orange">
+                Order status
+              </p>
+
+              <h2 className="mt-1 text-xl font-black text-kasi-black">
                 Status breakdown
               </h2>
-              <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+
+              <p className="mt-1 text-xs font-medium text-black/50">
                 Distribution of orders by status in this range.
               </p>
             </div>
-            <div className="text-right text-[11px] text-slate-500 dark:text-slate-400">
+
+            <div className="rounded-2xl bg-kasi-cream px-4 py-3 text-right text-xs font-bold text-black/55">
               <div>
                 Active now:{" "}
-                <span className="font-medium text-slate-800 dark:text-slate-100">
+                <span className="font-black text-kasi-black">
                   {activeNow.length}
                 </span>
               </div>
+
               <div>
                 Completed:{" "}
-                <span className="font-medium text-slate-800 dark:text-slate-100">
+                <span className="font-black text-kasi-black">
                   {completedCount}
                 </span>{" "}
                 · Cancelled:{" "}
-                <span className="font-medium text-slate-800 dark:text-slate-100">
+                <span className="font-black text-kasi-black">
                   {cancelledCount}
                 </span>
               </div>
@@ -647,28 +774,33 @@ export default async function StoreAnalyticsPage({ searchParams }: StoreAnalytic
           </div>
 
           {activeStatuses.length === 0 ? (
-            <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">No orders.</p>
+            <p className="mt-4 rounded-2xl bg-kasi-cream p-4 text-sm font-medium text-black/60">
+              No orders.
+            </p>
           ) : (
-            <div className="mt-3 space-y-2">
+            <div className="mt-4 space-y-3">
               {activeStatuses.map((status) => {
                 const count = statusCounts[status];
+
                 const widthPct =
-                  maxStatusCount > 0 ? Math.max(8, (count / maxStatusCount) * 100) : 0;
+                  maxStatusCount > 0
+                    ? Math.max(8, (count / maxStatusCount) * 100)
+                    : 0;
 
                 return (
-                  <div key={status} className="flex items-center gap-3 text-xs">
-                    <div className="w-40 text-[11px] text-slate-600 dark:text-slate-300">
+                  <div key={status} className="grid gap-2 sm:grid-cols-[180px_1fr_40px] sm:items-center">
+                    <div className="text-xs font-black uppercase tracking-wide text-black/55">
                       {humanizeStatus(status)}
                     </div>
-                    <div className="flex-1">
-                      <div className="relative h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                        <div
-                          className="absolute inset-y-0 left-0 rounded-full bg-emerald-500 dark:bg-emerald-400"
-                          style={{ width: `${widthPct}%` }}
-                        />
-                      </div>
+
+                    <div className="relative h-3 overflow-hidden rounded-full bg-kasi-cream">
+                      <div
+                        className="absolute inset-y-0 left-0 rounded-full bg-street-orange"
+                        style={{ width: `${widthPct}%` }}
+                      />
                     </div>
-                    <div className="w-10 text-right text-[11px] text-slate-600 dark:text-slate-300">
+
+                    <div className="text-right text-xs font-black text-kasi-black">
                       {count}
                     </div>
                   </div>
@@ -678,40 +810,32 @@ export default async function StoreAnalyticsPage({ searchParams }: StoreAnalytic
           )}
         </section>
 
-        {/* Top products (by completed revenue) */}
-        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">Top products</h2>
-          <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-            Ranked by completed revenue (more meaningful than qty-only).
+        <section className="rounded-[2rem] border border-black/10 bg-white p-5 shadow-sm">
+          <p className="text-xs font-black uppercase tracking-wide text-street-orange">
+            Menu performance
+          </p>
+
+          <h2 className="mt-1 text-xl font-black text-kasi-black">
+            Top products
+          </h2>
+
+          <p className="mt-1 text-xs font-medium text-black/50">
+            Ranked by completed revenue. This is more useful than quantity only.
           </p>
 
           {topProducts.length === 0 ? (
-            <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">No product data yet.</p>
+            <p className="mt-4 rounded-2xl bg-kasi-cream p-4 text-sm font-medium text-black/60">
+              No product data yet.
+            </p>
           ) : (
-            <div className="mt-3 overflow-hidden rounded-lg border border-slate-100 text-xs dark:border-slate-800">
-              <table className="min-w-full divide-y divide-slate-100 dark:divide-slate-800">
-                <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500 dark:bg-slate-950/40 dark:text-slate-400">
-                  <tr>
-                    <th className="px-3 py-2 text-left font-medium">Product</th>
-                    <th className="px-3 py-2 text-right font-medium">Qty sold</th>
-                    <th className="px-3 py-2 text-right font-medium">Revenue</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
-                  {topProducts.map((p) => (
-                    <tr key={p.name}>
-                      <td className="px-3 py-2 text-slate-800 dark:text-slate-100">{p.name}</td>
-                      <td className="px-3 py-2 text-right text-slate-700 dark:text-slate-200">
-                        {p.quantity}
-                      </td>
-                      <td className="px-3 py-2 text-right text-slate-700 dark:text-slate-200">
-                        {formatMoney(p.revenueCents)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <AnalyticsTable
+              columns={["Product", "Qty sold", "Revenue"]}
+              rows={topProducts.map((p) => [
+                p.name,
+                String(p.quantity),
+                formatMoney(p.revenueCents),
+              ])}
+            />
           )}
         </section>
       </div>
@@ -723,17 +847,34 @@ interface SummaryCardProps {
   label: string;
   value: string;
   helper?: string;
+  tone?: "default" | "success" | "danger";
 }
 
-function SummaryCard({ label, value, helper }: SummaryCardProps) {
+function SummaryCard({
+  label,
+  value,
+  helper,
+  tone = "default",
+}: SummaryCardProps) {
+  const valueClass =
+    tone === "success"
+      ? "text-kasi-green"
+      : tone === "danger"
+        ? "text-red-600"
+        : "text-kasi-black";
+
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-4">
-      <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+    <div className="rounded-[2rem] border border-black/10 bg-white p-5 shadow-sm">
+      <p className="text-xs font-black uppercase tracking-wide text-street-orange">
         {label}
       </p>
-      <p className="mt-1 text-lg font-semibold text-slate-900 dark:text-slate-50">{value}</p>
+
+      <p className={`mt-2 text-2xl font-black ${valueClass}`}>{value}</p>
+
       {helper && (
-        <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{helper}</p>
+        <p className="mt-2 text-xs font-medium leading-5 text-black/55">
+          {helper}
+        </p>
       )}
     </div>
   );
@@ -750,13 +891,64 @@ function RangeChip({ href, active, children }: RangeChipProps) {
     <Link
       href={href}
       className={[
-        "inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-medium transition",
+        "inline-flex items-center rounded-full border-2 px-3 py-1.5 text-xs font-black uppercase tracking-wide transition",
         active
-          ? "border-emerald-500 bg-emerald-50 text-emerald-700 dark:border-emerald-400/80 dark:bg-emerald-950/40 dark:text-emerald-200"
-          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-800",
+          ? "border-kasi-green bg-kasi-green text-white"
+          : "border-black/10 bg-white text-black/60 hover:border-kasi-green hover:text-kasi-green",
       ].join(" ")}
     >
       {children}
     </Link>
+  );
+}
+
+function AnalyticsTable({
+  columns,
+  rows,
+}: {
+  columns: string[];
+  rows: string[][];
+}) {
+  return (
+    <div className="mt-4 overflow-hidden rounded-2xl border border-black/10">
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-xs">
+          <thead className="bg-kasi-black text-white">
+            <tr>
+              {columns.map((column, index) => (
+                <th
+                  key={column}
+                  className={[
+                    "px-4 py-3 font-black uppercase tracking-wide text-white/70",
+                    index === 0 ? "text-left" : "text-right",
+                  ].join(" ")}
+                >
+                  {column}
+                </th>
+              ))}
+            </tr>
+          </thead>
+
+          <tbody className="divide-y divide-black/10 bg-white">
+            {rows.map((row, rowIndex) => (
+              <tr key={rowIndex} className="hover:bg-kasi-cream">
+                {row.map((cell, cellIndex) => (
+                  <td
+                    key={`${rowIndex}-${cellIndex}`}
+                    className={[
+                      "px-4 py-3 font-bold text-black/70",
+                      cellIndex === 0 ? "text-left" : "text-right",
+                      cellIndex === 0 ? "text-kasi-black" : "",
+                    ].join(" ")}
+                  >
+                    {cell}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }

@@ -7,19 +7,26 @@ export default function StoreSettingsLayout({
   children: React.ReactNode;
 }) {
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-6 dark:bg-slate-950">
-      <div className="mx-auto max-w-5xl space-y-4">
-        <header className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-50">
-            Store settings
-          </h1>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-300">
-            Manage your store information, delivery settings, and couriers.
+    <main className="py-2">
+      <div className="space-y-5">
+        <header className="rounded-[2rem] border border-black/10 bg-white p-5 shadow-sm">
+          <p className="text-xs font-black uppercase tracking-wide text-street-orange">
+            Owner controls
           </p>
 
-          <nav className="mt-3 flex flex-wrap gap-2 text-[11px]">
+          <h1 className="mt-2 text-3xl font-black tracking-tight text-kasi-black">
+            Store settings
+          </h1>
+
+          <p className="mt-2 text-sm font-medium text-black/60">
+            Manage your store information, delivery settings, pricing, and
+            couriers.
+          </p>
+
+          <nav className="mt-5 flex flex-wrap gap-2 text-xs">
             <Tab href="/owner/store/settings">General</Tab>
             <Tab href="/owner/store/settings/delivery">Delivery</Tab>
+            <Tab href="/owner/store/settings/pricing">Pricing</Tab>
             <Tab href="/owner/store/settings/couriers">Couriers</Tab>
           </nav>
         </header>
@@ -34,7 +41,7 @@ function Tab({ href, children }: { href: string; children: React.ReactNode }) {
   return (
     <Link
       href={href}
-      className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+      className="inline-flex items-center rounded-full border-2 border-black/10 bg-white px-4 py-2 text-xs font-black uppercase tracking-wide text-kasi-black transition hover:border-kasi-green hover:text-kasi-green"
     >
       {children}
     </Link>

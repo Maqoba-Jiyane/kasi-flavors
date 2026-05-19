@@ -1,12 +1,34 @@
 "use client";
 
-import { SignedIn, SignedOut, SignInButton, SignOutButton, SignUpButton } from "@clerk/nextjs";
-import { LogIn, User, Settings } from "lucide-react";
+import {
+  SignedIn,
+  SignedOut,
+  SignInButton,
+  SignOutButton,
+  SignUpButton,
+} from "@clerk/nextjs";
+import {
+  BarChart3,
+  CreditCard,
+  Home,
+  LogIn,
+  Menu,
+  PackageCheck,
+  Settings,
+  Store,
+  User,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
-type NavItem = { href: string; label: string; group?: "main" | "settings" };
+type NavItem = {
+  href: string;
+  label: string;
+  icon: React.ElementType;
+  group?: "main" | "settings";
+};
 
 export default function OwnerNavbar({
   storeSlug,
@@ -24,29 +46,51 @@ export default function OwnerNavbar({
   const [loading, setLoading] = useState(false);
   const [storeIsOpen, setStoreIsOpen] = useState(isOpen);
 
-  // Close mobile menu when route changes (nice UX)
   useEffect(() => {
     setMobileOpen(false);
   }, [pathname]);
 
   const nav: NavItem[] = useMemo(
     () => [
-      { href: "/owner/store/overview", label: "Overview", group: "main" },
-      { href: "/owner/store/orders", label: "Orders", group: "main" },
-      { href: "/owner/store/billing", label: "Billing", group: "main" },
-      { href: "/owner/store/analytics", label: "Analytics", group: "main" },
-
-      // ✅ NEW: settings entry point
-      { href: "/owner/store/settings", label: "Settings", group: "settings" },
+      {
+        href: "/owner/store/overview",
+        label: "Overview",
+        icon: Home,
+        group: "main",
+      },
+      {
+        href: "/owner/store/orders",
+        label: "Orders",
+        icon: PackageCheck,
+        group: "main",
+      },
+      {
+        href: "/owner/store/billing",
+        label: "Billing",
+        icon: CreditCard,
+        group: "main",
+      },
+      {
+        href: "/owner/store/analytics",
+        label: "Analytics",
+        icon: BarChart3,
+        group: "main",
+      },
+      {
+        href: "/owner/store/settings",
+        label: "Settings",
+        icon: Settings,
+        group: "settings",
+      },
     ],
     []
   );
 
   const isActive = (href: string) => {
-    // treat settings subroutes as active too
     if (href === "/owner/store/settings") {
       return pathname?.startsWith("/owner/store/settings");
     }
+
     return pathname?.startsWith(href);
   };
 
@@ -77,57 +121,73 @@ export default function OwnerNavbar({
     }
   }
 
+  const desktopLinkClass = (active: boolean) =>
+    [
+      "inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-black transition",
+      active
+        ? "bg-kasi-green text-white"
+        : "text-kasi-black/65 hover:bg-kasi-green/10 hover:text-kasi-green",
+    ].join(" ");
+
+  const mobileLinkClass = (active: boolean) =>
+    [
+      "flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-black transition",
+      active
+        ? "bg-kasi-green text-white"
+        : "bg-white text-kasi-black hover:bg-kasi-green/10 hover:text-kasi-green",
+    ].join(" ");
+
   return (
-    <nav className="border-b border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-900">
+    <nav className="sticky top-0 z-50 border-b border-black/10 bg-kasi-cream/95 backdrop-blur">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="flex h-14 items-center justify-between">
-          {/* Left */}
-          <div className="flex items-center gap-4">
-            <Link href="/owner/store/overview" className="flex items-center gap-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-md bg-emerald-600 font-bold text-white">
-                S
+        <div className="hidden border-b border-black/10 py-2 text-xs font-black uppercase tracking-wide text-kasi-black/60 md:flex md:items-center md:justify-between">
+          <span>Owner dashboard</span>
+          <span>
+            <span className="text-street-orange">Manage orders.</span>{" "}
+            <span className="text-kasi-green">Grow your store.</span>
+          </span>
+        </div>
+
+        <div className="flex h-20 items-center justify-between gap-4">
+          <div className="flex min-w-0 items-center gap-6">
+            <Link
+              href="/owner/store/overview"
+              className="flex min-w-0 items-center gap-3"
+            >
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border-2 border-kasi-black bg-kasi-black text-white shadow-sm">
+                <Store className="h-5 w-5" />
               </div>
-              <div className="leading-tight">
-                <div className="font-semibold text-slate-900 dark:text-slate-50">
-                  Store Panel
-                </div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">
+
+              <div className="min-w-0 leading-tight">
+                <div className="font-black text-kasi-black">Store Panel</div>
+                <div className="truncate text-xs font-bold text-black/50">
                   Manage {storeSlug}
                 </div>
               </div>
             </Link>
 
-            {/* Desktop nav */}
-            <div className="hidden lg:flex items-center gap-2">
+            <div className="hidden items-center gap-2 lg:flex">
               {nav
                 .filter((n) => n.group === "main")
-                .map((l) => {
-                  const active = isActive(l.href);
+                .map((item) => {
+                  const Icon = item.icon;
+                  const active = isActive(item.href);
+
                   return (
                     <Link
-                      key={l.href}
-                      href={l.href}
-                      className={[
-                        "rounded-md px-2 py-1 text-sm font-medium",
-                        active
-                          ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200"
-                          : "text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/50",
-                      ].join(" ")}
+                      key={item.href}
+                      href={item.href}
+                      className={desktopLinkClass(active)}
                     >
-                      {l.label}
+                      <Icon className="h-4 w-4" />
+                      {item.label}
                     </Link>
                   );
                 })}
 
-              {/* Settings pill (keeps space clean) */}
               <Link
                 href="/owner/store/settings"
-                className={[
-                  "ml-1 inline-flex items-center gap-2 rounded-md px-2 py-1 text-sm font-medium",
-                  isActive("/owner/store/settings")
-                    ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200"
-                    : "text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/50",
-                ].join(" ")}
+                className={desktopLinkClass(isActive("/owner/store/settings"))}
               >
                 <Settings className="h-4 w-4" />
                 Settings
@@ -135,125 +195,128 @@ export default function OwnerNavbar({
             </div>
           </div>
 
-          {/* Right */}
           <div className="flex items-center gap-2">
-            {/* Toggle (desktop) */}
-            <div className="hidden sm:flex items-center gap-2">
-              <button
-                onClick={toggle}
-                aria-pressed={storeIsOpen}
-                disabled={loading}
-                className={[
-                  "inline-flex items-center gap-2 rounded-lg px-3 py-1 text-sm font-semibold text-white shadow-sm transition focus:outline-none focus:ring-2 focus:ring-offset-2",
-                  storeIsOpen
-                    ? "bg-emerald-600 hover:bg-emerald-700 focus:ring-emerald-500"
-                    : "bg-rose-600 hover:bg-rose-700 focus:ring-rose-500",
-                  loading ? "cursor-not-allowed opacity-70" : "",
-                ].join(" ")}
-                title={storeIsOpen ? "Store is open for orders" : "Store is closed"}
-              >
-                <span className="inline-block h-2 w-2 rounded-full bg-white" />
-                {loading ? "Updating…" : storeIsOpen ? "Open" : "Closed"}
-              </button>
+            <button
+              onClick={toggle}
+              aria-pressed={storeIsOpen}
+              disabled={loading}
+              className={[
+                "hidden items-center gap-2 rounded-full px-4 py-2.5 text-sm font-black text-white shadow-sm transition focus:outline-none focus:ring-2 focus:ring-offset-2 sm:inline-flex",
+                storeIsOpen
+                  ? "bg-kasi-green hover:bg-street-orange focus:ring-kasi-green"
+                  : "bg-red-600 hover:bg-red-700 focus:ring-red-500",
+                loading ? "cursor-not-allowed opacity-70" : "",
+              ].join(" ")}
+              title={
+                storeIsOpen ? "Store is open for orders" : "Store is closed"
+              }
+            >
+              <span className="inline-block h-2 w-2 rounded-full bg-white" />
+              {loading ? "Updating…" : storeIsOpen ? "Open" : "Closed"}
+            </button>
 
-                <SignedIn>
-                  <SignOutButton>
-                    <button
-                      onClick={onSignOut}
-                      className="rounded-md border border-slate-200 bg-white px-3 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-                    >
-                      Sign out
-                    </button>
-                  </SignOutButton>
-                </SignedIn>
-            </div>
+            <SignedIn>
+              <SignOutButton>
+                <button
+                  onClick={onSignOut}
+                  className="hidden rounded-full border-2 border-black/10 bg-white px-4 py-2.5 text-sm font-black text-kasi-black transition hover:border-kasi-black lg:inline-flex"
+                >
+                  Sign out
+                </button>
+              </SignOutButton>
+            </SignedIn>
 
-            {/* Hamburger (mobile only) */}
             <button
               onClick={() => setMobileOpen((v) => !v)}
-              className="lg:hidden inline-flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-full border-2 border-kasi-black bg-white text-kasi-black lg:hidden"
               aria-label={mobileOpen ? "Close menu" : "Open menu"}
               aria-expanded={mobileOpen}
             >
-              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                <path strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
+              {mobileOpen ? (
+                <X className="h-5 w-5" />
+              ) : (
+                <Menu className="h-5 w-5" />
+              )}
             </button>
           </div>
         </div>
 
-        {/* Mobile menu */}
         {mobileOpen && (
-          <div className="lg:hidden mt-3 pb-3 border-t border-slate-100 dark:border-slate-800">
-            <div className="px-2 pt-3 space-y-1">
-              {nav.map((l) => (
-                <Link
-                  key={l.href}
-                  href={l.href}
-                  className={[
-                    "block rounded-md px-3 py-2 text-sm font-medium",
-                    isActive(l.href)
-                      ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200"
-                      : "text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800/50",
-                  ].join(" ")}
-                >
-                  {l.label}
-                </Link>
-              ))}
+          <div className="border-t border-black/10 pb-4 pt-4 lg:hidden">
+            <div className="space-y-2">
+              {nav.map((item) => {
+                const Icon = item.icon;
+                const active = isActive(item.href);
 
-              <div className="px-3 mt-2">
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={mobileLinkClass(active)}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {item.label}
+                  </Link>
+                );
+              })}
+
+              <div className="mt-4 rounded-3xl bg-kasi-black p-4 text-white">
+                <p className="text-sm font-black uppercase tracking-wide text-golden-yellow">
+                  Store status
+                </p>
+
+                <p className="mt-1 text-sm text-white/65">
+                  {storeIsOpen
+                    ? "Customers can place orders now."
+                    : "Customers can browse, but cannot place orders."}
+                </p>
+
                 <button
                   onClick={toggle}
                   disabled={loading}
                   className={[
-                    "w-full rounded-md px-3 py-2 text-sm font-semibold text-white",
-                    storeIsOpen ? "bg-emerald-600" : "bg-rose-600",
+                    "mt-4 w-full rounded-full px-4 py-3 text-sm font-black text-white",
+                    storeIsOpen ? "bg-red-600" : "bg-kasi-green",
                     loading ? "cursor-not-allowed opacity-70" : "",
                   ].join(" ")}
                 >
-                  {loading ? "Updating…" : storeIsOpen ? "Set Closed" : "Set Open"}
+                  {loading
+                    ? "Updating…"
+                    : storeIsOpen
+                      ? "Set closed"
+                      : "Set open"}
                 </button>
 
-                <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
-                  {storeIsOpen
-                    ? "Customers can place orders now."
-                    : "Customers can browse, but can’t place orders."}
-                </p>
-              </div>
+                <div className="mt-3">
+                  <SignedIn>
+                    <SignOutButton>
+                      <button
+                        onClick={onSignOut}
+                        className="w-full rounded-full bg-white px-4 py-3 text-sm font-black text-kasi-black"
+                      >
+                        Sign out
+                      </button>
+                    </SignOutButton>
+                  </SignedIn>
 
-              <div className="mt-3 px-3">
-                <SignedIn>
-                  <SignOutButton>
-                    <button
-                      onClick={onSignOut}
-                      className="rounded-md border border-slate-200 bg-white px-3 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-                    >
-                      Sign out
-                    </button>
-                  </SignOutButton>
-                </SignedIn>
-
-                <SignedOut>
-                  <div className="space-y-2">
-                    <SignInButton>
-                      <button className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">
-                        <span className="inline-flex items-center gap-2">
+                  <SignedOut>
+                    <div className="grid gap-2">
+                      <SignInButton>
+                        <button className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-4 py-3 text-sm font-black text-kasi-black">
                           <LogIn className="h-4 w-4" />
                           Sign in
-                        </span>
-                      </button>
-                    </SignInButton>
+                        </button>
+                      </SignInButton>
 
-                    <SignUpButton>
-                      <button className="w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white">
-                        <span className="inline-flex items-center gap-2">
+                      <SignUpButton>
+                        <button className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-kasi-green px-4 py-3 text-sm font-black text-white">
                           <User className="h-4 w-4" />
                           Sign up
-                        </span>
-                      </button>
-                    </SignUpButton>
-                  </div>
-                </SignedOut>
+                        </button>
+                      </SignUpButton>
+                    </div>
+                  </SignedOut>
+                </div>
               </div>
             </div>
           </div>

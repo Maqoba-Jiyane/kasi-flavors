@@ -1,30 +1,25 @@
 // app/(public)/cart/page.tsx
 import Link from "next/link";
-import { Trash2 } from "lucide-react";
+import { ArrowLeft, ShoppingBag, Trash2 } from "lucide-react";
 
 import {
   getCartForUser,
   calculateCartTotals,
   formatPrice,
 } from "@/lib/cart";
-import {
-  updateCartItem,
-  removeCartItem,
-  clearCart,
-} from "./actions";
+import { updateCartItem, removeCartItem, clearCart } from "./actions";
 import { getCurrentUserMinimal } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Your cart", // becomes "Your cart | Kasi Flavors" via root template
+  title: "Your cart",
   description:
     "Review your kasi food order, update quantities, and get ready to checkout with Kasi Flavors.",
   alternates: {
     canonical: "/cart",
   },
   openGraph: {
-    // still decent if someone shares the URL, but not SEO-focused
     type: "website",
     title: "Your cart | Kasi Flavors",
     description:
@@ -39,7 +34,7 @@ export const metadata: Metadata = {
   },
   robots: {
     index: false,
-    follow: false, // keep bots off this internal step
+    follow: false,
     googleBot: {
       index: false,
       follow: false,
@@ -51,7 +46,6 @@ export const metadata: Metadata = {
 export default async function CartPage() {
   const user = await getCurrentUserMinimal();
 
-  // Cart is now DB-backed and tied to the logged-in user
   if (!user) {
     redirect("/sign-in?redirectUrl=/cart");
   }
@@ -60,151 +54,222 @@ export default async function CartPage() {
   const { itemCount, subtotalCents } = calculateCartTotals(cart);
 
   const hasItems = cart.items.length > 0;
-
-  // You no longer need to serialize items into query params;
-  // checkout can re-read from DB or accept items but always validate against DB.
   const route = `/checkout?storeId=${cart.storeId}`;
 
   return (
-    <div className="space-y-6 min-h-screen px-4 py-6 sm:px-6 lg:px-8 dark:bg-slate-950">
-      <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-50">
-            Your cart
-          </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-300">
-            {hasItems
-              ? `${itemCount} item${itemCount === 1 ? "" : "s"} in your order.`
-              : "No items yet. Browse a store to start your order."}
-          </p>
-        </div>
+    <main className="min-h-screen bg-kasi-cream px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-6xl">
+        <Link
+          href="/"
+          className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-2 text-xs font-black uppercase tracking-wide text-kasi-black transition hover:bg-golden-yellow"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to stores
+        </Link>
 
-        {hasItems && (
-          <form action={clearCart}>
-            <button
-              type="submit"
-              className="text-xs font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100"
-            >
-              Clear cart
-            </button>
-          </form>
-        )}
-      </header>
+        <header className="mt-6 overflow-hidden rounded-[2rem] bg-kasi-black text-white shadow-sm">
+          <div className="relative px-5 py-8 sm:px-8">
+            <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full bg-street-orange blur-3xl opacity-40" />
+            <div className="absolute -bottom-16 left-10 h-48 w-48 rounded-full bg-kasi-green blur-3xl opacity-40" />
 
-      {!hasItems && (
-        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-          Your cart is empty.
-          <div className="mt-3">
-            <Link
-              href="/"
-              className="inline-flex items-center rounded-full bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
-            >
-              Browse stores
-            </Link>
-          </div>
-        </div>
-      )}
+            <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-black uppercase tracking-wide text-golden-yellow">
+                  Your order
+                </p>
 
-      {hasItems && (
-        <div className="grid gap-6 lg:grid-cols-[2fr,1fr]">
-          {/* Items */}
-          <section className="space-y-3">
-            {cart.items.map((item) => (
-              <div
-                key={item.productId}
-                className="flex items-start justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900"
-              >
-                <div className="flex-1 space-y-1">
-                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                    {item.name}
-                  </p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    {formatPrice(item.priceCents)} each
-                  </p>
+                <h1 className="mt-2 text-4xl font-black tracking-tight sm:text-5xl">
+                  Your cart
+                </h1>
 
-                  {/* Quantity form */}
-                  <form
-                    action={updateCartItem}
-                    className="mt-2 inline-flex items-center gap-2 text-xs"
-                  >
-                    <input
-                      type="hidden"
-                      name="productId"
-                      value={item.productId}
-                    />
-                    <label className="text-slate-500 dark:text-slate-400">
-                      Qty:
-                    </label>
-                    <input
-                      type="number"
-                      name="quantity"
-                      min={0}
-                      defaultValue={item.quantity}
-                      className="w-16 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-50"
-                    />
-                    <button
-                      type="submit"
-                      className="rounded-full bg-slate-900 px-3 py-1 text-[11px] font-semibold text-white hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
-                    >
-                      Update
-                    </button>
-                  </form>
-                </div>
-
-                <div className="flex flex-col items-end justify-between gap-2">
-                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                    {formatPrice(item.priceCents * item.quantity)}
-                  </p>
-
-                  <form action={removeCartItem}>
-                    <input
-                      type="hidden"
-                      name="productId"
-                      value={item.productId}
-                    />
-                    <button
-                      type="submit"
-                      className="text-[11px] font-medium text-slate-400 hover:text-red-500 dark:hover:text-red-400"
-                    >
-                      <Trash2 />
-                    </button>
-                  </form>
-                </div>
+                <p className="mt-3 text-sm font-medium text-white/65">
+                  {hasItems
+                    ? `${itemCount} item${
+                        itemCount === 1 ? "" : "s"
+                      } in your order. Review before checkout.`
+                    : "No items yet. Browse a store to start your order."}
+                </p>
               </div>
-            ))}
-          </section>
 
-          {/* Summary */}
-          <aside className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-              Order summary
+              {hasItems && (
+                <form action={clearCart}>
+                  <button
+                    type="submit"
+                    className="rounded-full border border-white/10 bg-white/10 px-5 py-3 text-sm font-black text-white transition hover:bg-street-orange"
+                  >
+                    Clear cart
+                  </button>
+                </form>
+              )}
+            </div>
+          </div>
+        </header>
+
+        {!hasItems && (
+          <section className="mt-6 rounded-[2rem] border border-dashed border-black/15 bg-white p-8 text-center shadow-sm">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-kasi-black text-3xl">
+              🛒
+            </div>
+
+            <h2 className="mt-5 text-2xl font-black text-kasi-black">
+              Your cart is empty
             </h2>
 
-            <dl className="space-y-2 text-sm">
-              <div className="flex items-center justify-between">
-                <dt className="text-slate-500 dark:text-slate-400">
-                  Subtotal
-                </dt>
-                <dd className="font-semibold text-slate-900 dark:text-slate-50">
-                  {formatPrice(subtotalCents)}
-                </dd>
-              </div>
-            </dl>
-
-            <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
-              You’ll choose <strong>collection / delivery</strong> and enter your
-              address on the next step.
+            <p className="mx-auto mt-2 max-w-md text-sm font-medium leading-6 text-black/60">
+              Find a local kasi food spot, add your favourites, and checkout
+              when you are ready.
             </p>
 
-            <Link
-              href={route}
-              className="mt-4 inline-flex w-full items-center justify-center rounded-full bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700"
-            >
-              Continue to checkout
-            </Link>
-          </aside>
-        </div>
-      )}
-    </div>
+            <div className="mt-6">
+              <Link href="/" className="inline-flex kf-btn-primary">
+                Browse stores
+              </Link>
+            </div>
+          </section>
+        )}
+
+        {hasItems && (
+          <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_380px]">
+            {/* Items */}
+            <section className="space-y-3">
+              {cart.items.map((item) => (
+                <div
+                  key={item.productId}
+                  className="rounded-[1.75rem] border border-black/10 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex min-w-0 flex-1 gap-3">
+                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-kasi-black text-2xl">
+                        🍟
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <p className="line-clamp-1 text-base font-black text-kasi-black">
+                          {item.name}
+                        </p>
+
+                        <p className="mt-1 text-xs font-bold uppercase tracking-wide text-black/45">
+                          {formatPrice(item.priceCents)} each
+                        </p>
+
+                        <form
+                          action={updateCartItem}
+                          className="mt-4 flex flex-wrap items-center gap-2"
+                        >
+                          <input
+                            type="hidden"
+                            name="productId"
+                            value={item.productId}
+                          />
+
+                          <label className="text-xs font-black uppercase tracking-wide text-black/50">
+                            Qty
+                          </label>
+
+                          <input
+                            type="number"
+                            name="quantity"
+                            min={0}
+                            defaultValue={item.quantity}
+                            className="w-20 rounded-full border-2 border-black/10 bg-kasi-cream px-3 py-2 text-center text-sm font-black text-kasi-black outline-none focus:border-kasi-green focus:ring-2 focus:ring-kasi-green/20"
+                          />
+
+                          <button
+                            type="submit"
+                            className="rounded-full bg-kasi-black px-4 py-2 text-xs font-black text-white transition hover:bg-street-orange"
+                          >
+                            Update
+                          </button>
+                        </form>
+                      </div>
+                    </div>
+
+                    <div className="flex shrink-0 flex-col items-end justify-between gap-4">
+                      <p className="rounded-full bg-golden-yellow px-3 py-1.5 text-sm font-black text-kasi-black">
+                        {formatPrice(item.priceCents * item.quantity)}
+                      </p>
+
+                      <form action={removeCartItem}>
+                        <input
+                          type="hidden"
+                          name="productId"
+                          value={item.productId}
+                        />
+
+                        <button
+                          type="submit"
+                          className="flex h-10 w-10 items-center justify-center rounded-full bg-red-50 text-red-500 transition hover:bg-red-500 hover:text-white"
+                          aria-label={`Remove ${item.name} from cart`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </section>
+
+            {/* Summary */}
+            <aside className="h-fit rounded-[2rem] border border-black/10 bg-white p-5 shadow-sm lg:sticky lg:top-28">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-kasi-green text-white">
+                  <ShoppingBag className="h-5 w-5" />
+                </div>
+
+                <div>
+                  <p className="text-xs font-black uppercase tracking-wide text-street-orange">
+                    Order summary
+                  </p>
+                  <h2 className="text-xl font-black text-kasi-black">
+                    Checkout details
+                  </h2>
+                </div>
+              </div>
+
+              <dl className="mt-6 space-y-4 text-sm">
+                <div className="flex items-center justify-between border-b border-black/10 pb-4">
+                  <dt className="font-bold text-black/55">Items</dt>
+                  <dd className="font-black text-kasi-black">
+                    {itemCount} item{itemCount === 1 ? "" : "s"}
+                  </dd>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <dt className="font-bold text-black/55">Subtotal</dt>
+                  <dd className="text-2xl font-black text-kasi-black">
+                    {formatPrice(subtotalCents)}
+                  </dd>
+                </div>
+              </dl>
+
+              <div className="mt-5 rounded-3xl bg-kasi-cream p-4">
+                <p className="text-xs font-black uppercase tracking-wide text-kasi-black">
+                  Next step
+                </p>
+                <p className="mt-1 text-xs font-medium leading-5 text-black/60">
+                  You’ll choose collection or delivery and enter your details on
+                  the checkout page.
+                </p>
+              </div>
+
+              <Link
+                href={route}
+                className="mt-5 inline-flex w-full items-center justify-center rounded-full bg-kasi-green px-5 py-3 text-sm font-black text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-street-orange"
+              >
+                Continue to checkout →
+              </Link>
+
+              <Link
+                href="/"
+                className="mt-3 inline-flex w-full items-center justify-center rounded-full border-2 border-black/10 bg-white px-5 py-3 text-sm font-black text-kasi-black transition hover:border-kasi-black"
+              >
+                Add more food
+              </Link>
+            </aside>
+          </div>
+        )}
+      </div>
+    </main>
   );
 }

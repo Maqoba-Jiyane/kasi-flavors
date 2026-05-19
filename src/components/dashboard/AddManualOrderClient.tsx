@@ -1,15 +1,13 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { Plus, RotateCcw, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 type Product = { id: string; name: string; priceCents: number };
 
 interface Props {
   products: Product[];
-  // Optional: wire these when you’re ready
-  // supportsDelivery?: boolean;
-  // supportsCollection?: boolean;
 }
 
 type Row = { id: string; productId: string; quantity: number };
@@ -42,17 +40,19 @@ export function AddManualOrderClient({ products }: Props) {
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Optional: auto-clear success
   useEffect(() => {
     if (!success) return;
+
     const t = setTimeout(() => setSuccess(null), 2500);
     return () => clearTimeout(t);
   }, [success]);
 
   function updateRow(id: string, patch: Partial<Row>) {
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+
     setRowErrors((prev) => {
       if (!prev[id]) return prev;
+
       const next = { ...prev };
       delete next[id];
       return next;
@@ -61,6 +61,7 @@ export function AddManualOrderClient({ products }: Props) {
 
   function addRow() {
     if (!hasProducts) return;
+
     setRows((prev) => [
       ...prev,
       { id: cryptoRandom(), productId: products[0]?.id || "", quantity: 1 },
@@ -69,8 +70,10 @@ export function AddManualOrderClient({ products }: Props) {
 
   function removeRow(id: string) {
     setRows((prev) => prev.filter((r) => r.id !== id));
+
     setRowErrors((prev) => {
       if (!prev[id]) return prev;
+
       const next = { ...prev };
       delete next[id];
       return next;
@@ -87,8 +90,10 @@ export function AddManualOrderClient({ products }: Props) {
 
     for (const r of rows) {
       totalItems += r.quantity;
+
       const p = getProduct(r.productId);
       if (!p) continue;
+
       totalCents += p.priceCents * r.quantity;
     }
 
@@ -96,7 +101,9 @@ export function AddManualOrderClient({ products }: Props) {
   }, [rows, productMap]);
 
   function resetForm() {
-    setRows([{ id: cryptoRandom(), productId: products[0]?.id || "", quantity: 1 }]);
+    setRows([
+      { id: cryptoRandom(), productId: products[0]?.id || "", quantity: 1 },
+    ]);
     setFullName("");
     setPhone("");
     setEmail("");
@@ -111,7 +118,9 @@ export function AddManualOrderClient({ products }: Props) {
     const nextRowErrors: Record<string, string> = {};
 
     if (!hasProducts) {
-      setError("No available menu items. Mark items as available before logging a manual order.");
+      setError(
+        "No available menu items. Mark items as available before logging a manual order."
+      );
       return false;
     }
 
@@ -124,11 +133,13 @@ export function AddManualOrderClient({ products }: Props) {
       if (!r.productId || !getProduct(r.productId)) {
         nextRowErrors[r.id] = "Select a valid product.";
       }
+
       if (!Number.isFinite(r.quantity) || r.quantity < 1) {
         nextRowErrors[r.id] = nextRowErrors[r.id]
           ? nextRowErrors[r.id] + " Quantity must be 1–99."
           : "Quantity must be 1–99.";
       }
+
       if (r.quantity > 99) {
         nextRowErrors[r.id] = nextRowErrors[r.id]
           ? nextRowErrors[r.id] + " Max 99."
@@ -190,20 +201,33 @@ export function AddManualOrderClient({ products }: Props) {
       setSuccess("Manual order created.");
       setProcessing(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message || "Network error." : "Something went wrong.");
+      setError(
+        err instanceof Error
+          ? err.message || "Network error."
+          : "Something went wrong."
+      );
       setProcessing(false);
     }
   }
 
+  const fieldClass =
+    "w-full rounded-2xl border-2 border-black/10 bg-kasi-cream px-3 py-2.5 text-sm font-semibold text-kasi-black outline-none transition placeholder:text-black/35 focus:border-kasi-green focus:bg-white focus:ring-4 focus:ring-kasi-green/10 disabled:cursor-not-allowed disabled:opacity-60";
+
   if (!hasProducts) {
     return (
-      <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+      <div className="rounded-[2rem] border border-dashed border-black/15 bg-white p-5 text-sm shadow-sm">
+        <p className="text-xs font-black uppercase tracking-wide text-street-orange">
+          Manual orders
+        </p>
+
+        <h3 className="mt-2 text-xl font-black text-kasi-black">
           Manual orders unavailable
         </h3>
-        <p className="mt-1">
+
+        <p className="mt-2 text-sm font-medium leading-6 text-black/60">
           There are no available menu items for this store. Mark products as{" "}
-          <span className="font-medium">available</span> in your menu before logging manual or walk-in orders.
+          <span className="font-black text-kasi-black">available</span> in your
+          menu before logging manual or walk-in orders.
         </p>
       </div>
     );
@@ -213,43 +237,51 @@ export function AddManualOrderClient({ products }: Props) {
     <form
       onSubmit={handleSubmit}
       aria-busy={processing}
-      className="space-y-3 rounded-lg border border-slate-200 bg-white p-3 text-sm dark:border-slate-800 dark:bg-slate-900"
+      className="space-y-5 rounded-[2rem] border border-black/10 bg-white p-5 text-sm shadow-sm"
     >
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+          <p className="text-xs font-black uppercase tracking-wide text-street-orange">
+            Walk-in / WhatsApp orders
+          </p>
+
+          <h3 className="mt-1 text-2xl font-black text-kasi-black">
             Add manual order
           </h3>
-          <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
-            For phone, WhatsApp or walk-in customers.
+
+          <p className="mt-1 text-sm font-medium text-black/55">
+            Create an order for phone, WhatsApp, or walk-in customers.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={resetForm}
             disabled={processing}
-            className="rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
+            className="inline-flex items-center gap-2 rounded-full border-2 border-black/10 bg-white px-4 py-2 text-xs font-black uppercase tracking-wide text-kasi-black transition hover:border-kasi-black disabled:opacity-60"
           >
+            <RotateCcw className="h-3.5 w-3.5" />
             Reset
           </button>
+
           <button
             type="submit"
             disabled={processing || rows.length === 0}
-            className="inline-flex items-center rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex items-center rounded-full bg-kasi-green px-4 py-2 text-xs font-black uppercase tracking-wide text-white shadow-sm transition hover:bg-street-orange disabled:cursor-not-allowed disabled:opacity-60"
           >
             {processing ? "Creating..." : "Create order"}
           </button>
         </div>
       </div>
 
-      {/* Items list */}
-      <div className="space-y-2">
+      <div className="space-y-3">
         {rows.map((r) => {
           const product = getProduct(r.productId);
           const lineTotal =
-            product && r.quantity > 0 ? ((product.priceCents * r.quantity) / 100).toFixed(2) : "0.00";
+            product && r.quantity > 0
+              ? ((product.priceCents * r.quantity) / 100).toFixed(2)
+              : "0.00";
 
           const hasRowError = Boolean(rowErrors[r.id]);
 
@@ -257,77 +289,89 @@ export function AddManualOrderClient({ products }: Props) {
             <div
               key={r.id}
               className={[
-                "flex flex-wrap items-center gap-2 rounded-md p-2",
+                "rounded-[1.5rem] border p-3 transition",
                 hasRowError
-                  ? "bg-rose-50 ring-1 ring-rose-200 dark:bg-rose-950/20 dark:ring-rose-900/60"
-                  : "bg-slate-50 dark:bg-slate-950/40",
+                  ? "border-red-200 bg-red-50"
+                  : "border-black/10 bg-kasi-cream",
               ].join(" ")}
             >
-              <div className="flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
-                <label className="flex-1 text-[11px] text-slate-600 dark:text-slate-300">
-                  <span className="sr-only">Product</span>
-                  <select
-                    value={r.productId}
-                    onChange={(e) => updateRow(r.id, { productId: e.target.value })}
-                    className="mt-0.5 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-                    disabled={processing}
-                    aria-label="Select product"
-                  >
-                    {products.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} — R {(p.priceCents / 100).toFixed(2)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="w-24 text-[11px] text-slate-600 dark:text-slate-300">
-                  <span className="sr-only">Quantity</span>
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    min={1}
-                    max={99}
-                    value={Number.isFinite(r.quantity) ? r.quantity : 1}
-                    onChange={(e) => {
-                      // allow temporary empty typing; clamp later
-                      const v = e.target.value;
-                      if (v === "") {
-                        updateRow(r.id, { quantity: 1 });
-                        return;
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+                <div className="grid flex-1 gap-3 sm:grid-cols-[1fr_120px]">
+                  <label>
+                    <span className="sr-only">Product</span>
+                    <select
+                      value={r.productId}
+                      onChange={(e) =>
+                        updateRow(r.id, { productId: e.target.value })
                       }
-                      updateRow(r.id, { quantity: Number(v) });
-                    }}
-                    onBlur={() => {
-                      const q = Number.isFinite(r.quantity) ? r.quantity : 1;
-                      const clamped = Math.max(1, Math.min(99, Math.round(q)));
-                      if (clamped !== r.quantity) updateRow(r.id, { quantity: clamped });
-                    }}
-                    className="mt-0.5 w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-sm text-center outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
-                    disabled={processing}
-                    aria-label="Quantity"
-                  />
-                </label>
-              </div>
+                      className={fieldClass}
+                      disabled={processing}
+                      aria-label="Select product"
+                    >
+                      {products.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} — R {(p.priceCents / 100).toFixed(2)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
 
-              <div className="flex items-center gap-2">
-                <span className="whitespace-nowrap text-xs font-medium text-slate-700 dark:text-slate-200">
-                  R {lineTotal}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => removeRow(r.id)}
-                  className="rounded-full px-2 py-1 text-xs text-red-500 hover:bg-red-50 disabled:opacity-50 dark:hover:bg-red-950/40"
-                  disabled={processing || rows.length === 1}
-                  title="Remove item"
-                  aria-label="Remove item"
-                >
-                  ×
-                </button>
+                  <label>
+                    <span className="sr-only">Quantity</span>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={1}
+                      max={99}
+                      value={Number.isFinite(r.quantity) ? r.quantity : 1}
+                      onChange={(e) => {
+                        const v = e.target.value;
+
+                        if (v === "") {
+                          updateRow(r.id, { quantity: 1 });
+                          return;
+                        }
+
+                        updateRow(r.id, { quantity: Number(v) });
+                      }}
+                      onBlur={() => {
+                        const q = Number.isFinite(r.quantity) ? r.quantity : 1;
+                        const clamped = Math.max(
+                          1,
+                          Math.min(99, Math.round(q))
+                        );
+
+                        if (clamped !== r.quantity) {
+                          updateRow(r.id, { quantity: clamped });
+                        }
+                      }}
+                      className={`${fieldClass} text-center`}
+                      disabled={processing}
+                      aria-label="Quantity"
+                    />
+                  </label>
+                </div>
+
+                <div className="flex items-center justify-between gap-3 lg:w-40">
+                  <span className="rounded-full bg-golden-yellow px-3 py-1.5 text-sm font-black text-kasi-black">
+                    R {lineTotal}
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() => removeRow(r.id)}
+                    className="flex h-9 w-9 items-center justify-center rounded-full bg-red-50 text-red-500 transition hover:bg-red-500 hover:text-white disabled:opacity-40"
+                    disabled={processing || rows.length === 1}
+                    title="Remove item"
+                    aria-label="Remove item"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
 
               {hasRowError && (
-                <div className="w-full text-[11px] text-rose-700 dark:text-rose-200">
+                <div className="mt-2 text-xs font-bold text-red-600">
                   {rowErrors[r.id]}
                 </div>
               )}
@@ -336,107 +380,91 @@ export function AddManualOrderClient({ products }: Props) {
         })}
       </div>
 
-      {/* Add item + total */}
-      <div className="flex flex-wrap items-center gap-2 text-xs">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <button
           type="button"
           onClick={addRow}
           disabled={processing}
-          className="inline-flex items-center rounded-full border border-slate-300 bg-white px-3 py-1 font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
+          className="inline-flex w-fit items-center gap-2 rounded-full border-2 border-black/10 bg-white px-4 py-2 text-xs font-black uppercase tracking-wide text-kasi-black transition hover:border-kasi-green hover:text-kasi-green disabled:opacity-60"
         >
-          + Add item
+          <Plus className="h-4 w-4" />
+          Add item
         </button>
 
-        <div className="ml-auto flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
-          <span>
-            Items:{" "}
-            <span className="font-semibold text-slate-900 dark:text-slate-50">{totals.totalItems}</span>
-          </span>
-          <span className="h-3 w-px bg-slate-200 dark:bg-slate-700" />
-          <span>
-            Total:{" "}
-            <span className="font-semibold text-slate-900 dark:text-slate-50">
-              R {(totals.totalCents / 100).toFixed(2)}
-            </span>
+        <div className="sm:ml-auto flex flex-wrap items-center gap-2 rounded-full bg-kasi-black px-4 py-2 text-xs font-black uppercase tracking-wide text-white">
+          <span>{totals.totalItems} item{totals.totalItems === 1 ? "" : "s"}</span>
+          <span className="h-3 w-px bg-white/20" />
+          <span className="text-golden-yellow">
+            R {(totals.totalCents / 100).toFixed(2)}
           </span>
         </div>
       </div>
 
-      {/* Customer info */}
-      <div className="grid gap-2 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-3">
         <input
           value={fullName}
           onChange={(e) => setFullName(e.target.value)}
-          placeholder="Customer name (optional)"
-          className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+          placeholder="Customer name optional"
+          className={fieldClass}
           disabled={processing}
         />
+
         <input
           type="tel"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
-          placeholder="Phone (for updates)"
-          className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+          placeholder="Phone for updates"
+          className={fieldClass}
           disabled={processing}
         />
+
         <input
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          placeholder="Email (optional)"
-          className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+          placeholder="Email optional"
+          className={fieldClass}
           disabled={processing}
         />
       </div>
 
-      {/* Fulfilment */}
-      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-700 dark:text-slate-200">
-        <span className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
+      <div className="rounded-[1.5rem] border border-black/10 bg-kasi-cream p-4">
+        <p className="text-xs font-black uppercase tracking-wide text-black/50">
           Fulfilment
-        </span>
+        </p>
 
-        <label className="inline-flex items-center gap-2">
-          <input
-            type="radio"
-            name="fulfilment"
-            checked={fulfilmentType === "COLLECTION"}
-            onChange={() => setFulfilmentType("COLLECTION")}
-            disabled={processing}
-          />
-          <span>Collection</span>
-        </label>
-
-        {/* When ready, enable Delivery and guard with store supports */}
-        {/* <label className="inline-flex items-center gap-2">
-          <input
-            type="radio"
-            name="fulfilment"
-            checked={fulfilmentType === "DELIVERY"}
-            onChange={() => setFulfilmentType("DELIVERY")}
-            disabled={processing || !supportsDelivery}
-          />
-          <span className={!supportsDelivery ? "text-slate-400" : ""}>Delivery</span>
-        </label> */}
+        <div className="mt-3 flex flex-wrap items-center gap-3 text-sm font-bold text-kasi-black">
+          <label className="inline-flex cursor-pointer items-center gap-2 rounded-full bg-white px-4 py-2">
+            <input
+              type="radio"
+              name="fulfilment"
+              checked={fulfilmentType === "COLLECTION"}
+              onChange={() => setFulfilmentType("COLLECTION")}
+              disabled={processing}
+              className="accent-kasi-green"
+            />
+            <span>Collection</span>
+          </label>
+        </div>
       </div>
 
-      {/* Note */}
       <textarea
         value={note}
         onChange={(e) => setNote(e.target.value)}
-        rows={2}
-        placeholder="Notes to kitchen (sauce, spice, special instructions)"
-        className="w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+        rows={3}
+        placeholder="Notes to kitchen: sauce, spice, special instructions..."
+        className={fieldClass}
         disabled={processing}
       />
 
-      {/* Feedback */}
       {error && (
-        <div className="rounded-md bg-rose-50 px-2 py-1 text-xs text-rose-700 dark:bg-rose-950/40 dark:text-rose-200">
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-600">
           {error}
         </div>
       )}
+
       {success && !error && (
-        <div className="rounded-md bg-emerald-50 px-2 py-1 text-xs text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200">
+        <div className="rounded-2xl border border-kasi-green/20 bg-kasi-green/10 px-4 py-3 text-sm font-bold text-kasi-green">
           {success}
         </div>
       )}
@@ -445,6 +473,9 @@ export function AddManualOrderClient({ products }: Props) {
 }
 
 function cryptoRandom() {
-  if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+
   return Math.random().toString(36).slice(2, 9);
 }

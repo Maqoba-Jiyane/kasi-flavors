@@ -149,13 +149,26 @@ export default async function AdminStoresPage({
   const rangeParam = (range as RangeOption | undefined) ?? "30d";
   const rangeStart = getRangeStart(rangeParam, now);
 
-  // Fetch all stores with owner
+  // Fetch all stores; we will load owners separately because some
+  // existing store rows may have a null/missing owner which would trigger
+  // the "Inconsistent query result" error when including the required
+  // relation directly.
   const stores = await prisma.store.findMany({
-    include: {
-      owner: true,
-    },
     orderBy: { name: "asc" },
   });
+
+  // Batch-load owners so we can display them; map by id for quick lookup.
+  const ownerIds = Array.from(
+    new Set(stores.map((s) => s.ownerId).filter(Boolean) as string[])
+  );
+  const owners =
+    ownerIds.length > 0
+      ? await prisma.user.findMany({
+          where: { id: { in: ownerIds } },
+          select: { id: true, name: true, email: true },
+        })
+      : [];
+  const ownerMap = new Map(owners.map((o) => [o.id, o]));
 
   // Fetch orders once for this range
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -170,7 +183,7 @@ export default async function AdminStoresPage({
   });
 
   type StoreAgg = {
-    store: Store & { owner: User };
+    store: Store;
     orders: number;
     revenueCents: number;
     lastOrderAt?: Date | null;
@@ -187,6 +200,8 @@ export default async function AdminStoresPage({
       lastOrderAt: null,
     });
   });
+
+  console.log("AdminStoresPage rows:", aggMap);
 
   // Aggregate orders into stores
   orders.forEach((o) => {
@@ -234,8 +249,10 @@ export default async function AdminStoresPage({
         )}
 
         {rows.map(({ store, orders, revenueCents, lastOrderAt }) => {
-          const ownerName =
-            store.owner?.name || store.owner?.email || "Unknown owner";
+          const owner = ownerMap.get(store.ownerId ?? "") || null;
+          const ownerName = owner
+            ? owner.name || owner.email
+            : "Unknown owner";
           const location = store.area
             ? `${store.area}, ${store.city}`
             : store.city;
@@ -329,11 +346,11 @@ export default async function AdminStoresPage({
             )}
 
             {rows.map(({ store, orders, revenueCents, lastOrderAt }) => {
+              const owner = ownerMap.get(store.ownerId ?? "") || null;
               const ownerName =
-                store.owner?.name + " " + store.owner.name ||
-                store.owner?.email ||
+                (owner && (owner.name || owner.email)) ||
                 "—";
-              const ownerEmail = store.owner?.email || null;
+              const ownerEmail = owner?.email || null;
               const location = store.area
                 ? `${store.area}, ${store.city}`
                 : store.city;

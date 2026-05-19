@@ -3,6 +3,8 @@
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser, assertRole } from "@/lib/auth";
 import { notFound } from "next/navigation";
+import { PriceAdjustmentSettings } from "@/components/PriceAdjustmentSettings";
+import { applyPriceAdjustment } from "@/lib/pricing";
 
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
@@ -103,6 +105,15 @@ export default async function AdminStoreDetailPage({
         </p>
       </section>
 
+      {/* Store Settings */}
+      <PriceAdjustmentSettings
+        storeId={storeId}
+        // @ts-ignore
+        priceAdjustmentEnabled={store.priceAdjustmentEnabled}
+        // @ts-ignore
+        priceAdjustmentPercent={store.priceAdjustmentPercent}
+      />
+
       {/* Products */}
       <section className="space-y-4">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
@@ -120,6 +131,7 @@ export default async function AdminStoreDetailPage({
                 <tr>
                   <Th>Name</Th>
                   <Th>Price</Th>
+                  <Th>Adj %</Th>
                   <Th>Available</Th>
                 </tr>
               </thead>
@@ -129,8 +141,43 @@ export default async function AdminStoreDetailPage({
                     key={product.id}
                     className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40"
                   >
-                    <Td>{product.name}</Td>
-                    <Td>{formatPrice(product.priceCents)}</Td>
+                    <Td>
+                      <a
+                        href={`/admin/stores/${storeId}/products/${product.id}`}
+                        className="font-medium text-emerald-600 hover:underline"
+                      >
+                        {product.name}
+                      </a>
+                    </Td>
+                    <Td>
+                      {/* calculate display price similar to product listing */}
+                      {(() => {
+                        let base = product.priceCents;
+                        const storeAny = store as any;
+                        const prodAny = product as any;
+                        if (prodAny.priceAdjustmentEnabled && prodAny.priceAdjustmentPercent) {
+                          base = applyPriceAdjustment(
+                            base,
+                            prodAny.priceAdjustmentEnabled,
+                            prodAny.priceAdjustmentPercent,
+                          );
+                        }
+                        if (storeAny.priceAdjustmentEnabled && storeAny.priceAdjustmentPercent !== 0) {
+                          base = applyPriceAdjustment(
+                            base,
+                            storeAny.priceAdjustmentEnabled,
+                            storeAny.priceAdjustmentPercent,
+                          );
+                        }
+                        return formatPrice(base);
+                      })()}
+                    </Td>
+                    <Td>
+                      {((product as any).priceAdjustmentEnabled &&
+                        (product as any).priceAdjustmentPercent !== 0)
+                        ? `${(product as any).priceAdjustmentPercent}%`
+                        : "—"}
+                    </Td>
                     <Td>
                       <span
                         className={

@@ -2,6 +2,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { MapPin, Loader2, CheckCircle2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 interface UserData {
@@ -12,12 +13,14 @@ interface UserData {
 
 interface Props {
   storeId: string;
-  itemsJson: string; // JSON string of { productId, quantity }[]
+  itemsJson: string;
   totalFormatted: string;
-  apiPath?: string; // default /api/customers/orders
+  apiPath?: string;
   user: UserData;
   deliveryFeeCents?: number;
   deliveryRadiusKm?: number;
+  supportsDelivery?: boolean;
+  onlinePaymentsEnabled?: boolean;
 }
 
 export function CheckoutForm({
@@ -26,20 +29,24 @@ export function CheckoutForm({
   apiPath = "/api/customers/orders",
   deliveryFeeCents,
   deliveryRadiusKm,
+  supportsDelivery,
+  onlinePaymentsEnabled,
 }: Props) {
   const router = useRouter();
+
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showOtpField, setShowOtpField] = useState(false);
   const [otpError, setOtpError] = useState<string | null>(null);
-  const [fulfilmentType, setFulfilmentType] = useState<"COLLECTION" | "DELIVERY">(
-    "COLLECTION"
-  );
-  const [paymentMethod, setPaymentMethod] = useState<"CASH_ON_DELIVERY" | "ONLINE_PAYMENT">(
-    "CASH_ON_DELIVERY"
-  );
 
-  // Location states for "Use my location" feature
+  const [fulfilmentType, setFulfilmentType] = useState<
+    "COLLECTION" | "DELIVERY"
+  >("COLLECTION");
+
+  const [paymentMethod, setPaymentMethod] = useState<
+    "CASH_ON_DELIVERY" | "ONLINE_PAYMENT"
+  >("CASH_ON_DELIVERY");
+
   const [useMyLocation, setUseMyLocation] = useState(false);
   const [locating, setLocating] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
@@ -48,12 +55,11 @@ export function CheckoutForm({
   const [formattedAddress, setFormattedAddress] = useState<string | null>(null);
   const [geocoding, setGeocoding] = useState(false);
 
-  // Stable idempotency key for this form instance
   const [idempotencyKey] = useState(() => {
     if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
       return crypto.randomUUID();
     }
-    // Fallback – still reasonably unique
+
     return `idemp_${Date.now()}_${Math.random().toString(16).slice(2)}`;
   });
 
@@ -68,7 +74,6 @@ export function CheckoutForm({
     const form = e.currentTarget as HTMLFormElement;
     const fd = new FormData(form);
 
-    // Ensure server gets these fields
     fd.set("storeId", storeId);
     fd.set("items", itemsJson);
     fd.set("idempotencyKey", idempotencyKey);
@@ -83,7 +88,6 @@ export function CheckoutForm({
       const json = await res.json().catch(() => null);
 
       if (!res.ok) {
-        // Special handling for phone verification
         if (json?.code === "PHONE_VERIFICATION_REQUIRED") {
           setShowOtpField(true);
           setOtpError(null);
@@ -122,11 +126,11 @@ export function CheckoutForm({
       } else {
         setError("Network error");
       }
+
       setProcessing(false);
     }
   }
 
-  // Request browser geolocation and populate hidden lat/lng fields
   async function useLocationNow() {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       setLocationError("Geolocation not supported in this browser");
@@ -142,15 +146,14 @@ export function CheckoutForm({
       async (pos) => {
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
-        
+
         setLatitude(lat);
         setLongitude(lng);
         setUseMyLocation(true);
 
-        // Fetch formatted address from coordinates
         setGeocoding(true);
         setLocating(false);
-        
+
         try {
           const response = await fetch("/api/geocode/reverse", {
             method: "POST",
@@ -160,18 +163,15 @@ export function CheckoutForm({
 
           if (response.ok) {
             const data = await response.json();
-            console.log("Geocode response:", data);
+
             if (data.success && data.address) {
               setFormattedAddress(data.address);
-            } else {
-              console.warn("No address in geocode response");
             }
-          } else {
-            console.error("Geocode request failed:", response.status);
           }
         } catch (error) {
-          console.error("Failed to fetch address:", error);
-          // Don't show error to user, we still have coordinates
+          if (process.env.NODE_ENV === "development") {
+            console.error("Failed to fetch address:", error);
+          }
         } finally {
           setGeocoding(false);
         }
@@ -192,103 +192,115 @@ export function CheckoutForm({
     setFormattedAddress(null);
   }
 
+  const fieldClass =
+    "w-full rounded-2xl border-2 border-black/10 bg-kasi-cream px-4 py-3 text-sm font-semibold text-kasi-black outline-none transition placeholder:text-black/35 focus:border-kasi-green focus:bg-white focus:ring-4 focus:ring-kasi-green/10 disabled:cursor-not-allowed disabled:opacity-60";
+
+  const labelClass =
+    "mb-1.5 block text-xs font-black uppercase tracking-wide text-black/55";
+
+  const optionCardClass = (active: boolean) =>
+    `flex flex-1 cursor-pointer items-center justify-between rounded-2xl border-2 px-4 py-3 transition ${
+      active
+        ? "border-kasi-green bg-kasi-green/10"
+        : "border-black/10 bg-white hover:border-kasi-green/40"
+    }`;
+
   return (
     <form
       onSubmit={handleSubmit}
-      className="mt-5 space-y-4 text-sm text-slate-900 dark:text-slate-50"
+      className="mt-5 space-y-5 text-sm text-kasi-black"
       aria-busy={processing}
     >
       <input type="hidden" name="storeId" value={storeId} />
       <input type="hidden" name="items" value={itemsJson} />
       <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
-      <input type="hidden" name="useMyLocation" value={useMyLocation ? "true" : "false"} />
+      <input
+        type="hidden"
+        name="useMyLocation"
+        value={useMyLocation ? "true" : "false"}
+      />
       <input type="hidden" name="latitude" value={latitude ?? ""} />
       <input type="hidden" name="longitude" value={longitude ?? ""} />
 
-      {/* fullName, phone, email, fulfilmentType, note, button, etc. */}
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2">
         <div>
-          <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-600 dark:text-slate-300">
-            Full name
-          </label>
+          <label className={labelClass}>Full name</label>
           <input
             name="fullName"
             required
             disabled={processing}
-            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition placeholder:text-slate-400 focus:border-emerald-500 disabled:opacity-60"
+            className={fieldClass}
             placeholder="Your full name"
             autoComplete="name"
           />
         </div>
 
         <div>
-          <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-600 dark:text-slate-300">
-            Phone number
-          </label>
+          <label className={labelClass}>Phone number</label>
           <input
             name="phone"
+            required
             disabled={processing}
-            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition placeholder:text-slate-400 focus:border-emerald-500 disabled:opacity-60"
+            className={fieldClass}
             placeholder="0732926640"
             inputMode="tel"
             autoComplete="tel"
           />
         </div>
 
-        <div className="sm:col-span-1">
-          <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-600 dark:text-slate-300">
-            Email (for confirmation)
-          </label>
+        <div className="sm:col-span-2">
+          <label className={labelClass}>Email for confirmation</label>
           <input
             type="email"
             name="email"
             required
             disabled={processing}
-            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition placeholder:text-slate-400 focus:border-emerald-500 disabled:opacity-60"
+            className={fieldClass}
             placeholder="you@example.com"
             autoComplete="email"
           />
         </div>
       </div>
 
-      {/* Optional OTP field, only shown if required */}
       {showOtpField && (
-        <div>
-          <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-600 dark:text-slate-300">
-            WhatsApp verification code
-          </label>
+        <div className="rounded-[1.5rem] border-2 border-street-orange/25 bg-street-orange/10 p-4">
+          <label className={labelClass}>WhatsApp verification code</label>
 
           <input
             name="phoneOtp"
             disabled={processing}
             className={`
-        w-full rounded-md border bg-white px-3 py-2 text-sm outline-none transition
-        placeholder:text-slate-400 disabled:opacity-60
-        otp-pulse
-        ${otpError ? "otp-shake" : ""}
-      `}
+              w-full rounded-2xl border-2 bg-white px-4 py-3 text-sm font-semibold text-kasi-black outline-none transition
+              placeholder:text-black/35 disabled:opacity-60 otp-pulse
+              ${otpError ? "otp-shake border-red-500" : "border-street-orange"}
+            `}
             placeholder="Enter the 6-digit code sent to WhatsApp"
             inputMode="numeric"
             autoComplete="one-time-code"
           />
 
-          {otpError && <p className="mt-1 text-xs text-red-500">{otpError}</p>}
+          {otpError ? (
+            <p className="mt-2 text-xs font-bold text-red-600">{otpError}</p>
+          ) : (
+            <p className="mt-2 text-xs font-medium text-black/60">
+              Check your WhatsApp messages and enter the code here.
+            </p>
+          )}
         </div>
       )}
 
-      {/* Fulfilment */}
       <div>
-        <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-600 dark:text-slate-300">
-          Fulfilment
-        </label>
-        <div className="flex gap-3 text-xs">
-          <label className="flex flex-1 cursor-pointer items-center justify-between rounded-md border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950 disabled:opacity-60">
+        <label className={labelClass}>Fulfilment</label>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className={optionCardClass(fulfilmentType === "COLLECTION")}>
             <span className="flex flex-col">
-              <span className="font-semibold">Collection</span>
-              <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                You&apos;ll collect from the store
+              <span className="text-sm font-black">Collection</span>
+              <span className="mt-1 text-xs font-medium text-black/55">
+                Collect from the store
               </span>
             </span>
+
             <input
               type="radio"
               name="fulfilmentType"
@@ -296,101 +308,131 @@ export function CheckoutForm({
               checked={fulfilmentType === "COLLECTION"}
               onChange={() => setFulfilmentType("COLLECTION")}
               disabled={processing}
-              className="h-4 w-4"
+              className="h-4 w-4 accent-kasi-green"
             />
           </label>
 
-          <label className="flex flex-1 cursor-pointer items-center justify-between rounded-md border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950 disabled:opacity-60">
-            <span className="flex flex-col">
-              <span className="font-semibold">Delivery</span>
-              <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                Delivered to your address
-                {deliveryFeeCents ? ` • +R${(deliveryFeeCents / 100).toFixed(2)}` : ""}
+          {supportsDelivery && (
+            <label className={optionCardClass(fulfilmentType === "DELIVERY")}>
+              <span className="flex flex-col">
+                <span className="text-sm font-black">Delivery</span>
+                <span className="mt-1 text-xs font-medium text-black/55">
+                  Delivered to your address
+                  {deliveryFeeCents
+                    ? ` • +R${(deliveryFeeCents / 100).toFixed(2)}`
+                    : ""}
+                </span>
               </span>
-            </span>
-            <input
-              type="radio"
-              name="fulfilmentType"
-              value="DELIVERY"
-              checked={fulfilmentType === "DELIVERY"}
-              onChange={() => setFulfilmentType("DELIVERY")}
-              disabled={processing}
-              className="h-4 w-4"
-            />
-          </label>
+
+              <input
+                type="radio"
+                name="fulfilmentType"
+                value="DELIVERY"
+                checked={fulfilmentType === "DELIVERY"}
+                onChange={() => setFulfilmentType("DELIVERY")}
+                disabled={processing}
+                className="h-4 w-4 accent-kasi-green"
+              />
+            </label>
+          )}
         </div>
 
         {fulfilmentType === "DELIVERY" && (
-          <div className="mt-3 space-y-3">
+          <div className="mt-4 space-y-4 rounded-[1.5rem] border border-black/10 bg-white p-4">
             {deliveryRadiusKm && (
-              <div className="rounded-md bg-blue-50 p-2 text-xs text-blue-700 dark:bg-blue-950/20 dark:text-blue-400">
-                📍 Delivery available within {deliveryRadiusKm}km. Please use "Use my location" to verify your address is within range.
+              <div className="rounded-2xl bg-golden-yellow/25 p-3 text-xs font-bold leading-5 text-kasi-black">
+                📍 Delivery is available within {deliveryRadiusKm}km. Use your
+                location to help verify that your address is within range.
               </div>
             )}
+
             <div>
-              <div className="flex items-center justify-between">
-                <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-600 dark:text-slate-300">
+              <div className="mb-1.5 flex items-center justify-between gap-3">
+                <label className="block text-xs font-black uppercase tracking-wide text-black/55">
                   Delivery address
                 </label>
-                <div className="text-right">
-                  {!useMyLocation ? (
-                    <button
-                      type="button"
-                      onClick={useLocationNow}
-                      disabled={processing || locating}
-                      className="ml-2 rounded-md bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-60"
-                    >
-                      {locating ? "Locating…" : "Use my location"}
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={clearLocation}
-                      disabled={processing}
-                      className="ml-2 rounded-md bg-slate-50 px-2 py-1 text-xs text-slate-700 disabled:opacity-60"
-                    >
-                      Use different address
-                    </button>
-                  )}
-                </div>
+
+                {!useMyLocation ? (
+                  <button
+                    type="button"
+                    onClick={useLocationNow}
+                    disabled={processing || locating}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-kasi-green px-3 py-1.5 text-xs font-black text-white transition hover:bg-street-orange disabled:opacity-60"
+                  >
+                    {locating ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <MapPin className="h-3.5 w-3.5" />
+                    )}
+                    {locating ? "Locating…" : "Use my location"}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={clearLocation}
+                    disabled={processing}
+                    className="rounded-full bg-black/10 px-3 py-1.5 text-xs font-black text-kasi-black transition hover:bg-black/15 disabled:opacity-60"
+                  >
+                    Use different address
+                  </button>
+                )}
               </div>
 
               <input
                 name="address"
-                required={fulfilmentType === "DELIVERY" && !useMyLocation && !deliveryRadiusKm}
+                required={
+                  fulfilmentType === "DELIVERY" &&
+                  !useMyLocation &&
+                  !deliveryRadiusKm
+                }
                 disabled={processing || useMyLocation || !!deliveryRadiusKm}
-                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition placeholder:text-slate-400 focus:border-emerald-500 disabled:opacity-60 disabled:bg-slate-50"
-                placeholder={deliveryRadiusKm ? "Click 'Use my location' above" : "Street address, building, or flat number"}
+                className={fieldClass}
+                placeholder={
+                  deliveryRadiusKm
+                    ? "Click 'Use my location' above"
+                    : "Street address, building, or flat number"
+                }
                 autoComplete="street-address"
               />
 
               {useMyLocation && (
-                <div className="mt-2 rounded-md bg-emerald-50 p-3 dark:bg-emerald-950/20">
-                  {(locating || geocoding) ? (
-                    <p className="text-xs text-slate-600 dark:text-slate-400">
-                      📍 {locating ? "Getting your location..." : "Getting address from your location..."}
+                <div className="mt-3 rounded-2xl bg-kasi-green/10 p-4">
+                  {locating || geocoding ? (
+                    <p className="flex items-center gap-2 text-xs font-bold text-black/65">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      {locating
+                        ? "Getting your location..."
+                        : "Getting address from your location..."}
                     </p>
                   ) : formattedAddress ? (
                     <div>
-                      <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
-                        📍 Your location:
+                      <p className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-kasi-green">
+                        <CheckCircle2 className="h-4 w-4" />
+                        Your location
                       </p>
-                      <p className="mt-1 text-sm text-slate-700 dark:text-slate-300">
+
+                      <p className="mt-2 text-sm font-semibold leading-6 text-kasi-black">
                         {formattedAddress}
                       </p>
-                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+
+                      <p className="mt-1 text-xs font-medium text-black/45">
                         ({latitude?.toFixed(5)}, {longitude?.toFixed(5)})
                       </p>
                     </div>
                   ) : (
-                    <p className="text-xs text-slate-600 dark:text-slate-400">
-                      📍 Using location: {latitude?.toFixed(5) ?? "?"}, {longitude?.toFixed(5) ?? "?"}
+                    <p className="text-xs font-medium text-black/60">
+                      📍 Using location: {latitude?.toFixed(5) ?? "?"},{" "}
+                      {longitude?.toFixed(5) ?? "?"}
                     </p>
                   )}
                 </div>
               )}
 
-              {locationError && <p className="mt-1 text-xs text-red-500">{locationError}</p>}
+              {locationError && (
+                <p className="mt-2 text-xs font-bold text-red-600">
+                  {locationError}
+                </p>
+              )}
             </div>
 
             {!deliveryRadiusKm && (
@@ -398,13 +440,14 @@ export function CheckoutForm({
                 <input
                   name="suburb"
                   disabled={processing || useMyLocation}
-                  className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition placeholder:text-slate-400 focus:border-emerald-500 disabled:opacity-60"
+                  className={fieldClass}
                   placeholder="Suburb"
                 />
+
                 <input
                   name="city"
                   disabled={processing || useMyLocation}
-                  className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition placeholder:text-slate-400 focus:border-emerald-500 disabled:opacity-60"
+                  className={fieldClass}
                   placeholder="City"
                   autoComplete="address-level2"
                 />
@@ -414,19 +457,25 @@ export function CheckoutForm({
         )}
       </div>
 
-      {/* Payment Method */}
       <div>
-        <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-600 dark:text-slate-300">
-          Payment method
-        </label>
-        <div className="flex gap-3 text-xs">
-          <label className="flex flex-1 cursor-pointer items-center justify-between rounded-md border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950 disabled:opacity-60">
+        <label className={labelClass}>Payment method</label>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label
+            className={optionCardClass(paymentMethod === "CASH_ON_DELIVERY")}
+          >
             <span className="flex flex-col">
-              <span className="font-semibold">Cash on {fulfilmentType === "DELIVERY" ? "Delivery" : "Collection"}</span>
-              <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                Pay when your order {fulfilmentType === "DELIVERY" ? "arrives" : "is ready"}
+              <span className="text-sm font-black">
+                Cash on{" "}
+                {fulfilmentType === "DELIVERY" ? "Delivery" : "Collection"}
+              </span>
+
+              <span className="mt-1 text-xs font-medium text-black/55">
+                Pay when your order{" "}
+                {fulfilmentType === "DELIVERY" ? "arrives" : "is ready"}
               </span>
             </span>
+
             <input
               type="radio"
               name="paymentMethod"
@@ -434,90 +483,92 @@ export function CheckoutForm({
               checked={paymentMethod === "CASH_ON_DELIVERY"}
               onChange={() => setPaymentMethod("CASH_ON_DELIVERY")}
               disabled={processing}
-              className="h-4 w-4"
+              className="h-4 w-4 accent-kasi-green"
             />
           </label>
 
-          <label className="flex flex-1 cursor-pointer items-center justify-between rounded-md border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950 disabled:opacity-60">
-            <span className="flex flex-col">
-              <span className="font-semibold">Pay Online</span>
-              <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                Secure payment with card
+          {onlinePaymentsEnabled && (
+            <label
+              className={optionCardClass(paymentMethod === "ONLINE_PAYMENT")}
+            >
+              <span className="flex flex-col">
+                <span className="text-sm font-black">Pay online</span>
+
+                <span className="mt-1 text-xs font-medium text-black/55">
+                  Secure card payment
+                </span>
               </span>
-            </span>
-            <input
-              type="radio"
-              name="paymentMethod"
-              value="ONLINE_PAYMENT"
-              checked={paymentMethod === "ONLINE_PAYMENT"}
-              onChange={() => setPaymentMethod("ONLINE_PAYMENT")}
-              disabled={processing}
-              className="h-4 w-4"
-            />
-          </label>
+
+              <input
+                type="radio"
+                name="paymentMethod"
+                value="ONLINE_PAYMENT"
+                checked={paymentMethod === "ONLINE_PAYMENT"}
+                onChange={() => setPaymentMethod("ONLINE_PAYMENT")}
+                disabled={processing}
+                className="h-4 w-4 accent-kasi-green"
+              />
+            </label>
+          )}
         </div>
       </div>
 
-      {/* Note */}
       <div>
-        <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-600 dark:text-slate-300">
-          Note to store (optional)
-        </label>
+        <label className={labelClass}>Note to store optional</label>
+
         <textarea
           name="note"
-          rows={2}
+          rows={3}
           disabled={processing}
-          className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition placeholder:text-slate-400 focus:border-emerald-500 disabled:opacity-60"
-          placeholder="Any extra instructions?"
+          className={fieldClass}
+          placeholder="Example: no tomato, extra sauce, call when ready..."
         />
       </div>
 
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      {error && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-600">
+          {error}
+        </div>
+      )}
 
-      <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600 dark:bg-slate-950/40 dark:text-slate-300">
-        <p className="font-medium">Payment</p>
-        <p className="mt-1">
+      <div className="rounded-[1.5rem] bg-kasi-black p-4 text-white">
+        <p className="text-xs font-black uppercase tracking-wide text-golden-yellow">
+          Payment
+        </p>
+
+        <p className="mt-1 text-sm font-medium text-white/70">
           {paymentMethod === "ONLINE_PAYMENT" ? (
-            <span className="font-semibold">Secure online payment</span>
+            <span>Secure online payment will open after submitting.</span>
           ) : (
-            <span className="font-semibold">Cash on {fulfilmentType === "DELIVERY" ? "delivery" : "collection"}</span>
+            <span>
+              You will pay cash on{" "}
+              {fulfilmentType === "DELIVERY" ? "delivery" : "collection"}.
+            </span>
           )}
         </p>
       </div>
 
-      <div className="flex items-center justify-end gap-3 pt-2">
+      <div className="flex items-center justify-end pt-2">
         <button
           type="submit"
           disabled={processing}
-          className={`inline-flex items-center rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition ${
-            processing ? "opacity-80 cursor-wait" : "hover:bg-emerald-700"
+          className={`inline-flex w-full items-center justify-center rounded-full px-6 py-4 text-sm font-black text-white shadow-sm transition sm:w-auto ${
+            processing
+              ? "cursor-wait bg-kasi-green/80"
+              : "bg-kasi-green hover:-translate-y-0.5 hover:bg-street-orange"
           }`}
         >
           {processing ? (
             <>
-              <svg
-                className="mr-2 h-4 w-4 animate-spin text-white"
-                viewBox="0 0 24 24"
-                fill="none"
-              >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
-                />
-              </svg>
-              {paymentMethod === "ONLINE_PAYMENT" ? "Redirecting to payment…" : "Processing order…"}
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              {paymentMethod === "ONLINE_PAYMENT"
+                ? "Redirecting to payment…"
+                : "Processing order…"}
             </>
+          ) : paymentMethod === "ONLINE_PAYMENT" ? (
+            "Proceed to payment"
           ) : (
-            paymentMethod === "ONLINE_PAYMENT" ? "Proceed to payment" : "Place order"
+            "Place order"
           )}
         </button>
       </div>
