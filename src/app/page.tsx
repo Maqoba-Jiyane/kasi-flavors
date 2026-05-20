@@ -5,43 +5,45 @@ import { getCurrentUserMinimal } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { distanceKm } from "@/lib/location/distance";
+import { KasiLaunchLanding } from "@/components/launch/KasiLaunchLanding";
+import { LocationSearch } from "@/components/location/LocationSearch";
 
 export const metadata: Metadata = {
-  title: "Order kasi food online",
+  title: "Order kasi food for collection",
   description:
-    "Discover local kasi food spots near you. Skip the queue, order kota, chips, bunny chow and more online for collection or delivery.",
+    "Discover kasi food spots near you. Order kota, chips, bunny chow and more online, then collect when your food is ready.",
   alternates: { canonical: "/" },
   openGraph: {
     type: "website",
-    title: "Order kasi food online | Kasi Flavors",
+    title: "Order kasi food for collection | Kasi Flavors",
     description:
-      "Browse kasi restaurants by area and city. Skip the queue and order kota, bunny chow, shisanyama and more for collection or delivery.",
+      "Find nearby kasi food spots, order online, and collect when your meal is ready.",
     url: "/",
     images: [
       {
         url: "/og-image-home.png",
         width: 1200,
         height: 630,
-        alt: "Kasi Flavors home – skip the queue and order online",
+        alt: "Kasi Flavors home – order online and collect",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Order kasi food online | Kasi Flavors",
+    title: "Order kasi food for collection | Kasi Flavors",
     description:
-      "Find nearby kasi spots and order kota, chips, bunny chow and more online.",
+      "Find nearby kasi spots and order kota, chips, bunny chow and more for collection.",
     images: ["/og-image-home.png"],
   },
   robots: { index: true, follow: true },
 };
 
 type SearchParams = {
-  q?: string;
-  city?: string;
-  area?: string;
+  lat?: string;
+  lng?: string;
+  showFar?: string;
   showClosed?: string;
-  fulfillment?: string;
 };
 
 export default async function HomePage({
@@ -51,94 +53,66 @@ export default async function HomePage({
 }) {
   const sp = await searchParams;
 
-  const q = (sp.q ?? "").trim();
-  const city = (sp.city ?? "").trim();
-  const area = (sp.area ?? "").trim();
-  const showClosed = sp.showClosed === "1";
-  const fulfillment = (sp.fulfillment ?? "").trim();
-
   const user = await getCurrentUserMinimal();
 
   if (user?.role === "STORE_OWNER") {
-    redirect("/owner/store/orders");
+    redirect("/owner/store/overview");
   }
 
-  if (user?.role !== "ADMIN") {
-    redirect("/become-a-partner");
-  }
+  // Keep the real customer homepage admin-only during development.
+  // Non-admin users see the launch/onboarding landing.
+  // if (user?.role !== "ADMIN") {
+  //   return <KasiLaunchLanding />;
+  // }
 
-  const allStoresForFilters = await prisma.store.findMany({
-    select: { city: true, area: true },
-  });
+  const lat = Number(sp.lat);
+  const lng = Number(sp.lng);
+  const hasLocation = Number.isFinite(lat) && Number.isFinite(lng);
 
-  const cityOptions = Array.from(
-    new Set(allStoresForFilters.map((s) => s.city).filter(Boolean)),
-  ).sort((a, b) => a.localeCompare(b));
+  const showFar = sp.showFar === "1";
+  const showClosed = sp.showClosed === "1";
 
-  const areaOptions = Array.from(
-    new Set(
-      allStoresForFilters
-        .filter((s) => (city ? s.city === city : true))
-        .map((s) => s.area)
-        .filter((a) => a && a.trim().length > 0),
-    ),
-  ).sort((a, b) => a.localeCompare(b));
+  const stores = hasLocation
+    ? await prisma.store.findMany({
+        where: {
+          supportsCollection: true,
+          ...(showClosed ? {} : { isOpen: true }),
+          lat: { not: null },
+          lng: { not: null },
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      })
+    : [];
 
-  const fulfillmentWhere =
-    fulfillment === "delivery"
-      ? { supportsDelivery: true }
-      : fulfillment === "collection"
-        ? { supportsCollection: true }
-        : {};
+  const mappedStores = hasLocation
+    ? stores
+        .map((store) => {
+          const distance = distanceKm(
+            { lat, lng },
+            {
+              lat: store.lat!,
+              lng: store.lng!,
+            }
+          );
 
-  const stores = await prisma.store.findMany({
-    where: {
-      ...(city ? { city } : {}),
-      ...(area ? { area } : {}),
-      ...(q
-        ? {
-            OR: [
-              { name: { contains: q, mode: "insensitive" } },
-              { description: { contains: q, mode: "insensitive" } },
-              { city: { contains: q, mode: "insensitive" } },
-              { area: { contains: q, mode: "insensitive" } },
-            ],
-          }
-        : {}),
-      ...(showClosed ? {} : { isOpen: true }),
-      ...fulfillmentWhere,
-    },
-    orderBy: [{ isOpen: "desc" }, { createdAt: "desc" }],
-    select: {
-      id: true,
-      name: true,
-      slug: true,
-      area: true,
-      city: true,
-      description: true,
-      avgPrepTimeMinutes: true,
-      isOpen: true,
-      supportsDelivery: true,
-      supportsCollection: true,
-    },
-  });
+          const collectionRadiusKm = store.collectionRadiusKm ?? 5;
+          const canOrder = distance <= collectionRadiusKm;
 
-  const mapped = stores.map((s) => ({
-    id: s.id,
-    name: s.name,
-    slug: s.slug,
-    area: s.area,
-    city: s.city,
-    description: s.description ?? undefined,
-    avgPrepTimeMinutes: s.avgPrepTimeMinutes,
-    isOpen: s.isOpen,
-    supportsDelivery: s.supportsDelivery,
-    supportsCollection: s.supportsCollection,
-  }));
+          return {
+            ...store,
+            distanceKm: distance,
+            canOrder,
+            collectionRadiusKm,
+          };
+        })
+        .filter((store) => showFar || store.canOrder)
+        .sort((a, b) => a.distanceKm - b.distanceKm)
+    : [];
 
   return (
     <main className="min-h-screen overflow-hidden bg-kasi-cream">
-      {/* Hero */}
       <section className="relative border-b border-black/10 bg-kasi-black text-white">
         <div className="absolute inset-0 opacity-20">
           <div className="absolute -left-20 top-10 h-56 w-56 rounded-full bg-street-orange blur-3xl" />
@@ -150,60 +124,62 @@ export default async function HomePage({
           <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
             <div>
               <span className="kf-pill border-white/10 bg-white/10 text-white">
-                Real flavors. Real kasi.
+                Order online. Collect nearby.
               </span>
 
               <h1 className="mt-5 max-w-3xl text-4xl font-black leading-[0.95] tracking-tight sm:text-5xl lg:text-7xl">
-                Skip the queue.{" "}
-                <span className="text-kasi-green">Order online.</span>
+                Kasi food without the{" "}
+                <span className="text-kasi-green">long wait.</span>
               </h1>
 
               <p className="mt-5 max-w-2xl text-base font-medium leading-7 text-white/75 sm:text-lg">
-                Find nearby kasi food spots, browse menus, and order kota,
-                chips, bunny chow, shisanyama and more for collection or
-                delivery.
+                Find nearby kasi food spots, browse their menus, place your
+                order online, and collect when your food is ready.
               </p>
 
               <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-                <a href="#stores" className="kf-btn-primary">
+                <a href="#location" className="kf-btn-primary">
                   Find food near me
                 </a>
+
                 <a
-                  href="#filters"
+                  href="#how-it-works"
                   className="inline-flex items-center justify-center rounded-full border-2 border-white/20 bg-white/10 px-5 py-3 text-sm font-extrabold text-white transition hover:bg-white hover:text-kasi-black"
                 >
-                  Browse stores
+                  How collection works
                 </a>
               </div>
 
               <div className="mt-8 grid max-w-xl grid-cols-3 gap-3">
                 <div className="rounded-2xl border border-white/10 bg-white/10 p-3">
-                  <p className="text-2xl">🍟</p>
+                  <p className="text-2xl">📍</p>
                   <p className="mt-1 text-xs font-bold text-white/70">
-                    Fresh kota & chips
+                    Find nearby spots
                   </p>
                 </div>
+
                 <div className="rounded-2xl border border-white/10 bg-white/10 p-3">
                   <p className="text-2xl">🛍️</p>
                   <p className="mt-1 text-xs font-bold text-white/70">
-                    Easy pickup
+                    Order for pickup
                   </p>
                 </div>
+
                 <div className="rounded-2xl border border-white/10 bg-white/10 p-3">
-                  <p className="text-2xl">📍</p>
+                  <p className="text-2xl">🍟</p>
                   <p className="mt-1 text-xs font-bold text-white/70">
-                    Local spots
+                    Collect fresh food
                   </p>
                 </div>
               </div>
             </div>
 
             <div className="relative">
-              <div className="rounded-[2rem] border-4 border-white bg-kasi-cream p-5 text-kasi-black shadow-2xl rotate-1">
-                <div className="rounded-[1.5rem] bg-kasi-black p-5 text-white">
+              <div className="rotate-1 rounded-4xl border-4 border-white bg-kasi-cream p-5 text-kasi-black shadow-2xl">
+                <div className="rounded-3xl bg-kasi-black p-5 text-white">
                   <div className="flex items-center justify-between">
                     <span className="rounded-full bg-kasi-green px-3 py-1 text-xs font-black uppercase">
-                      Kasi born
+                      Collection first
                     </span>
                     <span className="text-3xl">🌶️</span>
                   </div>
@@ -212,11 +188,13 @@ export default async function HomePage({
                     <p className="text-sm font-bold uppercase tracking-wide text-golden-yellow">
                       Today&apos;s craving
                     </p>
+
                     <h2 className="mt-2 text-4xl font-black leading-none">
                       Loaded Kota
                     </h2>
+
                     <p className="mt-3 text-sm text-white/70">
-                      Chips, egg, sausage, sauce and street flavor from local
+                      Chips, egg, sausage, sauce and street flavour from local
                       kitchens near you.
                     </p>
                   </div>
@@ -225,14 +203,15 @@ export default async function HomePage({
                     <div className="flex items-center justify-between gap-4">
                       <div>
                         <p className="text-xs font-black uppercase text-black/50">
-                          Fast & easy
+                          Simple flow
                         </p>
                         <p className="text-lg font-black">
-                          Order. Pay. Collect.
+                          Order. Wait. Collect.
                         </p>
                       </div>
+
                       <div className="rounded-full bg-street-orange px-4 py-2 text-sm font-black text-white">
-                        Hot
+                        Fresh
                       </div>
                     </div>
                   </div>
@@ -240,180 +219,144 @@ export default async function HomePage({
               </div>
 
               <div className="absolute -bottom-4 -left-4 hidden rounded-2xl bg-golden-yellow px-5 py-3 text-sm font-black text-kasi-black shadow-lg sm:block">
-                Bold flavors 🔥
+                Pickup made easier 🔥
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Filters */}
-      <section id="filters" className="kf-container -mt-6 relative z-10">
-        <div className="kf-card p-4 sm:p-5">
-          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <p className="text-xs font-black uppercase tracking-wide text-kasi-green">
-                Find your next meal
-              </p>
-              <h2 className="text-2xl font-black tracking-tight text-kasi-black">
-                Browse kasi food spots
-              </h2>
-            </div>
+      <section id="location" className="kf-container relative z-10 -mt-6">
+        <div className="kf-card p-5">
+          <p className="text-xs font-black uppercase tracking-wide text-kasi-green">
+            Start with your location
+          </p>
 
-            <p className="text-sm font-medium text-black/55">
-              {mapped.length} {mapped.length === 1 ? "store" : "stores"} found
-            </p>
-          </div>
+          <h2 className="mt-1 text-2xl font-black tracking-tight text-kasi-black">
+            Find collection spots near you
+          </h2>
 
-          <form
-            method="get"
-            action="/"
-            className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
-          >
-            <div className="lg:col-span-2">
-              <label className="kf-label">Search</label>
-              <input
-                name="q"
-                defaultValue={q}
-                placeholder="Search store, kota, chips, area…"
-                className="kf-input"
-              />
-            </div>
+          <p className="mt-2 text-sm font-medium leading-6 text-black/60">
+            Kasi Flavors starts with collection. Share your location so we can
+            show food spots close enough for pickup.
+          </p>
 
-            <div>
-              <label className="kf-label">City</label>
-              <select name="city" defaultValue={city} className="kf-input">
-                <option value="">All cities</option>
-                {cityOptions.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="kf-label">Area</label>
-              <select name="area" defaultValue={area} className="kf-input">
-                <option value="">All areas</option>
-                {areaOptions.length === 0 ? (
-                  <option value="" disabled>
-                    {city ? "No areas found" : "Select a city first"}
-                  </option>
-                ) : null}
-                {areaOptions.map((a) => (
-                  <option key={a} value={a}>
-                    {a}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="sm:col-span-2 lg:col-span-2">
-              <label className="kf-label">Order type</label>
-              <select
-                name="fulfillment"
-                defaultValue={fulfillment}
-                className="kf-input"
-              >
-                <option value="">Collection or delivery</option>
-                <option value="collection">Collection only</option>
-                <option value="delivery">Delivery available</option>
-              </select>
-            </div>
-
-            <div className="flex flex-col gap-3 sm:col-span-2 lg:col-span-2 sm:flex-row sm:items-center sm:justify-between">
-              <label className="flex items-center gap-2 text-sm font-bold text-black/70">
-                <input
-                  type="checkbox"
-                  name="showClosed"
-                  value="1"
-                  defaultChecked={showClosed}
-                  className="h-4 w-4 accent-kasi-green"
-                />
-                Show closed stores
-              </label>
-
-              <div className="flex gap-2">
-                <Link
-                  href="/"
-                  className="inline-flex items-center justify-center rounded-full border-2 border-black/15 bg-white px-4 py-2.5 text-sm font-extrabold text-kasi-black transition hover:border-kasi-black"
-                >
-                  Reset
-                </Link>
-                <button type="submit" className="kf-btn-secondary py-2.5">
-                  Apply filters
-                </button>
-              </div>
-            </div>
-          </form>
+          <LocationSearch
+            initialLat={hasLocation ? lat : null}
+            initialLng={hasLocation ? lng : null}
+            showFar={showFar}
+            showClosed={showClosed}
+          />
         </div>
       </section>
 
-      {/* Brand strip */}
-      <section className="kf-container mt-8">
-        <div className="grid gap-3 rounded-[2rem] bg-kasi-black p-4 text-white sm:grid-cols-3">
-          <div className="rounded-2xl bg-white/10 p-4">
-            <p className="text-2xl">🍔</p>
-            <h3 className="mt-2 font-black">Bold flavors</h3>
-            <p className="mt-1 text-sm text-white/65">
-              Real food from local kasi kitchens.
-            </p>
-          </div>
+      <section id="how-it-works" className="kf-container mt-8">
+        <div className="grid gap-3 rounded-4xl bg-kasi-black p-4 text-white sm:grid-cols-3">
+          <InfoCard
+            icon="📍"
+            title="Choose your location"
+            text="We show food spots close enough for collection."
+          />
 
-          <div className="rounded-2xl bg-white/10 p-4">
-            <p className="text-2xl">⚡</p>
-            <h3 className="mt-2 font-black">Fast & easy</h3>
-            <p className="mt-1 text-sm text-white/65">
-              Order online and collect without the stress.
-            </p>
-          </div>
+          <InfoCard
+            icon="🍔"
+            title="Order online"
+            text="Browse the menu, choose your food, and place your order."
+          />
 
-          <div className="rounded-2xl bg-white/10 p-4">
-            <p className="text-2xl">🏪</p>
-            <h3 className="mt-2 font-black">Kasi born</h3>
-            <p className="mt-1 text-sm text-white/65">
-              Built to help local food businesses grow.
-            </p>
-          </div>
+          <InfoCard
+            icon="🛍️"
+            title="Collect when ready"
+            text="Go to the store and collect your food when it is ready."
+          />
         </div>
       </section>
 
-      {/* Results */}
       <section id="stores" className="kf-container py-10">
         <div className="mb-5 flex items-end justify-between gap-4">
           <div>
             <p className="text-xs font-black uppercase tracking-wide text-street-orange">
-              Available now
+              Nearby collection spots
             </p>
+
             <h2 className="text-2xl font-black tracking-tight text-kasi-black sm:text-3xl">
               Local food spots
             </h2>
           </div>
+
+          {hasLocation && (
+            <p className="text-sm font-bold text-black/55">
+              {mappedStores.length}{" "}
+              {mappedStores.length === 1 ? "store" : "stores"} found
+            </p>
+          )}
         </div>
 
-        {mapped.length === 0 ? (
+        {!hasLocation ? (
           <div className="kf-card p-6 text-sm font-medium text-black/65">
             <p className="text-lg font-black text-kasi-black">
-              No stores found{city ? ` in ${city}` : ""}
-              {area ? ` (${area})` : ""}.
-            </p>
-            <p className="mt-2">
-              Try a different search, remove filters, or check again later.
+              Enter your location first
             </p>
 
-            <Link href="/" className="mt-5 inline-flex kf-btn-primary">
-              Clear filters
-            </Link>
+            <p className="mt-2">
+              We only show collection stores after we know where you are. This
+              helps prevent orders from stores that are too far to collect from.
+            </p>
+          </div>
+        ) : mappedStores.length === 0 ? (
+          <div className="kf-card p-6 text-sm font-medium text-black/65">
+            <p className="text-lg font-black text-kasi-black">
+              No nearby collection stores found.
+            </p>
+
+            <p className="mt-2">
+              Try showing further stores, checking closed stores, or coming back
+              later as more food spots join Kasi Flavors.
+            </p>
+
+            <div className="mt-5 flex flex-wrap gap-2">
+              <Link
+                href={`/?lat=${lat}&lng=${lng}&showFar=1${
+                  showClosed ? "&showClosed=1" : ""
+                }`}
+                className="kf-btn-primary inline-flex"
+              >
+                Show further stores
+              </Link>
+
+              <Link href="/" className="kf-btn-secondary inline-flex">
+                Reset location
+              </Link>
+            </div>
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {mapped.map((store) => (
+            {mappedStores.map((store) => (
               <StoreCard key={store.id} store={store} />
             ))}
           </div>
         )}
       </section>
     </main>
+  );
+}
+
+function InfoCard({
+  icon,
+  title,
+  text,
+}: {
+  icon: string;
+  title: string;
+  text: string;
+}) {
+  return (
+    <div className="rounded-2xl bg-white/10 p-4">
+      <p className="text-2xl">{icon}</p>
+
+      <h3 className="mt-2 font-black">{title}</h3>
+
+      <p className="mt-1 text-sm text-white/65">{text}</p>
+    </div>
   );
 }

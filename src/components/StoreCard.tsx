@@ -13,6 +13,11 @@ export type Store = {
   isOpen: boolean;
   supportsDelivery?: boolean;
   supportsCollection?: boolean;
+
+  // Distance/radius fields from homepage mapping
+  distanceKm?: number;
+  canOrder?: boolean;
+  collectionRadiusKm?: number;
 };
 
 interface StoreCardProps {
@@ -22,6 +27,10 @@ interface StoreCardProps {
 export function StoreCard({ store }: StoreCardProps) {
   const hasPrepTime =
     Number.isFinite(store.avgPrepTimeMinutes) && store.avgPrepTimeMinutes > 0;
+
+  const hasDistance = typeof store.distanceKm === "number";
+  const isTooFar = store.canOrder === false;
+  const canOpenMenu = store.isOpen && !isTooFar;
 
   const CardInner = (
     <>
@@ -36,14 +45,17 @@ export function StoreCard({ store }: StoreCardProps) {
           </div>
 
           <span
-            className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wide ring-1 ${
-              store.isOpen
-                ? "bg-kasi-green text-white ring-white/15"
-                : "bg-white/10 text-white/70 ring-white/15"
-            }`}
+            className={[
+              "inline-flex items-center rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wide ring-1",
+              isTooFar
+                ? "bg-street-orange text-white ring-white/15"
+                : store.isOpen
+                  ? "bg-kasi-green text-white ring-white/15"
+                  : "bg-white/10 text-white/70 ring-white/15",
+            ].join(" ")}
           >
             <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current" />
-            {store.isOpen ? "Open now" : "Closed"}
+            {isTooFar ? "Too far" : store.isOpen ? "Open now" : "Closed"}
           </span>
         </div>
 
@@ -71,6 +83,19 @@ export function StoreCard({ store }: StoreCardProps) {
         )}
 
         <div className="mt-4 flex flex-wrap gap-2">
+          {hasDistance ? (
+            <span
+              className={[
+                "inline-flex items-center rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wide ring-1",
+                isTooFar
+                  ? "bg-street-orange/10 text-street-orange ring-street-orange/20"
+                  : "bg-kasi-green/10 text-kasi-green ring-kasi-green/20",
+              ].join(" ")}
+            >
+              {store.distanceKm!.toFixed(1)} km away
+            </span>
+          ) : null}
+
           {hasPrepTime ? (
             <span className="inline-flex items-center rounded-full bg-kasi-cream px-3 py-1 text-[11px] font-black uppercase tracking-wide text-kasi-black ring-1 ring-black/10">
               ~ {store.avgPrepTimeMinutes} min prep
@@ -89,14 +114,34 @@ export function StoreCard({ store }: StoreCardProps) {
             </span>
           ) : null}
         </div>
+
+        {isTooFar && (
+          <div className="mt-4 rounded-2xl bg-street-orange/10 px-4 py-3 text-xs font-bold leading-5 text-street-orange">
+            This store is outside the collection radius
+            {typeof store.collectionRadiusKm === "number"
+              ? ` of ${store.collectionRadiusKm}km`
+              : ""}
+            . You can browse nearby stores instead.
+          </div>
+        )}
       </div>
 
       {/* CTA strip */}
       <div className="border-t border-black/10 bg-white px-4 py-3">
-        {store.isOpen ? (
+        {isTooFar ? (
           <div className="flex items-center justify-between gap-3">
             <span className="text-xs font-black uppercase tracking-wide text-black/45">
-              Skip the queue
+              Collection unavailable
+            </span>
+
+            <span className="inline-flex items-center rounded-full bg-street-orange/10 px-4 py-2 text-xs font-black text-street-orange">
+              Too far
+            </span>
+          </div>
+        ) : store.isOpen ? (
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs font-black uppercase tracking-wide text-black/45">
+              Order for collection
             </span>
 
             <span className="inline-flex items-center rounded-full bg-kasi-green px-4 py-2 text-xs font-black text-white transition group-hover:bg-street-orange">
@@ -121,7 +166,7 @@ export function StoreCard({ store }: StoreCardProps) {
   const baseClass =
     "relative flex min-h-[280px] flex-col overflow-hidden rounded-2xl border border-black/10 bg-white shadow-sm transition";
 
-  if (store.isOpen) {
+  if (canOpenMenu) {
     return (
       <Link
         href={`/stores/${store.slug}`}
@@ -134,7 +179,10 @@ export function StoreCard({ store }: StoreCardProps) {
 
   return (
     <div
-      className={`${baseClass} opacity-75 grayscale-[0.25]`}
+      className={[
+        baseClass,
+        isTooFar ? "opacity-90" : "opacity-75 grayscale-[0.25]",
+      ].join(" ")}
       aria-disabled="true"
     >
       {CardInner}

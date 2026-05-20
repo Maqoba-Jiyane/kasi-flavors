@@ -377,7 +377,7 @@ export default async function StoreOverviewPage({
                   Collection
                 </label>
 
-                <label className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3 text-sm font-black text-kasi-black">
+                {/* <label className="flex items-center gap-3 rounded-2xl bg-white px-4 py-3 text-sm font-black text-kasi-black">
                   <input
                     type="checkbox"
                     name="supportsDelivery"
@@ -392,7 +392,7 @@ export default async function StoreOverviewPage({
                   <p className="rounded-2xl bg-golden-yellow/25 p-3 text-xs font-bold leading-5 text-kasi-black">
                     Add at least 1 courier to enable Delivery.
                   </p>
-                )}
+                )} */}
               </div>
 
               <p className="mt-3 text-xs font-medium leading-5 text-black/55">

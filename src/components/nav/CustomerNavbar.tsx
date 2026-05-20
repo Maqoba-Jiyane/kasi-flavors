@@ -88,7 +88,7 @@ export default function CustomerNavbar({
               <Link
                 href="/owner-application"
                 className={navLinkClass(
-                  pathname.startsWith("/owner-application")
+                  pathname.startsWith("/owner-application"),
                 )}
               >
                 Open a store
@@ -104,7 +104,6 @@ export default function CustomerNavbar({
             >
               <ShoppingCart className="mr-2 h-4 w-4" />
               Cart
-
               {cartCount > 0 && (
                 <span className="ml-2 inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-street-orange px-2 text-xs font-black text-white">
                   {cartCount}
@@ -115,7 +114,7 @@ export default function CustomerNavbar({
             <div className="hidden items-center gap-2 lg:flex">
               <SignedIn>
                 {userName ? (
-                  <span className="max-w-[140px] truncate text-sm font-bold text-kasi-black/70">
+                  <span className="max-w-35 truncate text-sm font-bold text-kasi-black/70">
                     {userName}
                   </span>
                 ) : null}
@@ -128,19 +127,21 @@ export default function CustomerNavbar({
               </SignedIn>
 
               <SignedOut>
-                <SignInButton>
-                  <button className="inline-flex items-center gap-2 rounded-full border-2 border-black/10 bg-white px-4 py-2.5 text-sm font-black text-kasi-black transition hover:border-kasi-green hover:text-kasi-green">
-                    <LogIn className="h-4 w-4" />
-                    Sign in
-                  </button>
-                </SignInButton>
+                <Link
+                  href="/sign-in"
+                  className="inline-flex items-center gap-2 rounded-full border-2 border-black/10 bg-white px-4 py-2.5 text-sm font-black text-kasi-black transition hover:border-kasi-green hover:text-kasi-green"
+                >
+                  <LogIn className="h-4 w-4" />
+                  Sign in
+                </Link>
 
-                <SignUpButton>
-                  <button className="inline-flex items-center gap-2 rounded-full bg-kasi-green px-4 py-2.5 text-sm font-black text-white transition hover:bg-street-orange">
-                    <User className="h-4 w-4" />
-                    Sign up
-                  </button>
-                </SignUpButton>
+                <Link
+                  href="/sign-up"
+                  className="inline-flex items-center gap-2 rounded-full bg-kasi-green px-4 py-2.5 text-sm font-black text-white transition hover:bg-street-orange"
+                >
+                  <User className="h-4 w-4" />
+                  Sign up
+                </Link>
               </SignedOut>
             </div>
 
@@ -178,7 +179,7 @@ export default function CustomerNavbar({
                 href="/owner-application"
                 onClick={() => setOpen(false)}
                 className={mobileLinkClass(
-                  pathname.startsWith("/owner-application")
+                  pathname.startsWith("/owner-application"),
                 )}
               >
                 Open a store
