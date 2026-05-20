@@ -61,9 +61,9 @@ export default async function HomePage({
 
   // Keep the real customer homepage admin-only during development.
   // Non-admin users see the launch/onboarding landing.
-  // if (user?.role !== "ADMIN") {
-  //   return <KasiLaunchLanding />;
-  // }
+  if (user?.role !== "ADMIN") {
+    return <KasiLaunchLanding />;
+  }
 
   const lat = Number(sp.lat);
   const lng = Number(sp.lng);
