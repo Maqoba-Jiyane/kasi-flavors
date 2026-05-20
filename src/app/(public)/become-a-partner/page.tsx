@@ -25,6 +25,10 @@ export default async function BecomePartnerPage() {
     redirect("/sign-in?redirect_url=/become-a-partner");
   }
 
+  if(user.role === "STORE_OWNER"){
+    redirect("/owner/store/overview");
+  }
+
   const savedOnboarding = await prisma.storeOnboarding.findFirst({
     where: {
       ownerId: user.id,
@@ -70,30 +74,30 @@ export default async function BecomePartnerPage() {
             name: user.name,
             email: user.email,
           }}
-savedOnboarding={
-  savedOnboarding
-    ? {
-        id: savedOnboarding.id,
-        status: savedOnboarding.status,
-        storeName: savedOnboarding.storeName,
-        description: savedOnboarding.description,
-        address: savedOnboarding.address,
-        area: savedOnboarding.area,
-        city: savedOnboarding.city,
-        phone: savedOnboarding.phone,
-        avgPrepTimeMinutes: savedOnboarding.avgPrepTimeMinutes,
-        supportsCollection: savedOnboarding.supportsCollection,
-        supportsDelivery: savedOnboarding.supportsDelivery,
-        deliveryFeeCents: savedOnboarding.deliveryFeeCents,
-        deliveryRadiusKm: savedOnboarding.deliveryRadiusKm,
-        onlinePaymentsEnabled: savedOnboarding.onlinePaymentsEnabled,
-        namingTheme: savedOnboarding.namingTheme,
-        extractedMenuJson: savedOnboarding.extractedMenuJson,
-        reviewedProductsJson: savedOnboarding.reviewedProductsJson,
-        menuImages: savedOnboarding.menuImages,
-      }
-    : null
-}
+          savedOnboarding={
+            savedOnboarding
+              ? {
+                  id: savedOnboarding.id,
+                  status: savedOnboarding.status,
+                  storeName: savedOnboarding.storeName,
+                  description: savedOnboarding.description,
+                  address: savedOnboarding.address,
+                  area: savedOnboarding.area,
+                  city: savedOnboarding.city,
+                  phone: savedOnboarding.phone,
+                  avgPrepTimeMinutes: savedOnboarding.avgPrepTimeMinutes,
+                  supportsCollection: savedOnboarding.supportsCollection,
+                  supportsDelivery: savedOnboarding.supportsDelivery,
+                  deliveryFeeCents: savedOnboarding.deliveryFeeCents,
+                  deliveryRadiusKm: savedOnboarding.deliveryRadiusKm,
+                  onlinePaymentsEnabled: savedOnboarding.onlinePaymentsEnabled,
+                  namingTheme: savedOnboarding.namingTheme,
+                  extractedMenuJson: savedOnboarding.extractedMenuJson,
+                  reviewedProductsJson: savedOnboarding.reviewedProductsJson,
+                  menuImages: savedOnboarding.menuImages,
+                }
+              : null
+          }
         />
       </section>
     </main>

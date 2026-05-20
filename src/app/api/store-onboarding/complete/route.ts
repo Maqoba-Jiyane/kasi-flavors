@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserMinimal } from "@/lib/auth";
+import { geocodeAddress } from "@/lib/location/geocode";
 
 function slugify(value: string) {
   const slug = value
@@ -51,15 +52,13 @@ function normalizeProducts(productsInput: unknown[]) {
         ? String(product.description).trim()
         : null,
       categoryName: normalizeCategoryName(
-        product?.categoryName || product?.category
+        product?.categoryName || product?.category,
       ),
       priceCents: normalizePriceCents(product?.priceCents),
       imageUrl: product?.imageUrl ? String(product.imageUrl).trim() : null,
       isAvailable: product?.isAvailable !== false,
       priceAdjustmentEnabled: Boolean(product?.priceAdjustmentEnabled),
-      priceAdjustmentPercent: normalizePercent(
-        product?.priceAdjustmentPercent
-      ),
+      priceAdjustmentPercent: normalizePercent(product?.priceAdjustmentPercent),
     }))
     .filter((product) => product.name && product.priceCents > 0);
 }
@@ -74,7 +73,7 @@ export async function POST(req: Request) {
           success: false,
           error: "Please sign in before submitting your store.",
         },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
@@ -94,64 +93,64 @@ export async function POST(req: Request) {
       : null;
 
     const storeName = String(
-      storeInput?.storeName || onboarding?.storeName || ""
+      storeInput?.storeName || onboarding?.storeName || "",
     ).trim();
 
     const address = String(
-      storeInput?.address || onboarding?.address || ""
+      storeInput?.address || onboarding?.address || "",
     ).trim();
 
     const city = String(storeInput?.city || onboarding?.city || "").trim();
     const area = String(storeInput?.area || onboarding?.area || "").trim();
 
     const description = String(
-      storeInput?.description || onboarding?.description || ""
+      storeInput?.description || onboarding?.description || "",
     ).trim();
 
     const phone = String(storeInput?.phone || onboarding?.phone || "").trim();
 
     const supportsCollection = Boolean(
-      storeInput?.supportsCollection ?? onboarding?.supportsCollection
+      storeInput?.supportsCollection ?? onboarding?.supportsCollection,
     );
 
     const supportsDelivery = Boolean(
-      storeInput?.supportsDelivery ?? onboarding?.supportsDelivery
+      storeInput?.supportsDelivery ?? onboarding?.supportsDelivery,
     );
 
     const avgPrepTimeMinutes = normalizePrepTime(
-      storeInput?.avgPrepTimeMinutes ?? onboarding?.avgPrepTimeMinutes ?? 25
+      storeInput?.avgPrepTimeMinutes ?? onboarding?.avgPrepTimeMinutes ?? 25,
     );
 
     const deliveryFeeCents = normalizePriceCents(
-      storeInput?.deliveryFeeCents ?? onboarding?.deliveryFeeCents ?? 0
+      storeInput?.deliveryFeeCents ?? onboarding?.deliveryFeeCents ?? 0,
     );
 
     const deliveryRadiusKm = normalizeDeliveryRadius(
-      storeInput?.deliveryRadiusKm ?? onboarding?.deliveryRadiusKm ?? null
+      storeInput?.deliveryRadiusKm ?? onboarding?.deliveryRadiusKm ?? null,
     );
 
     const onlinePaymentsEnabled = Boolean(
-      storeInput?.onlinePaymentsEnabled ?? onboarding?.onlinePaymentsEnabled
+      storeInput?.onlinePaymentsEnabled ?? onboarding?.onlinePaymentsEnabled,
     );
 
     if (!storeName) {
       return NextResponse.json(
         { success: false, error: "Store name is required." },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (!address) {
       return NextResponse.json(
         { success: false, error: "Store address is required." },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (!city) {
       return NextResponse.json(
         { success: false, error: "City is required." },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -161,7 +160,7 @@ export async function POST(req: Request) {
           success: false,
           error: "Choose at least one order option: collection or delivery.",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -170,7 +169,7 @@ export async function POST(req: Request) {
     if (validProducts.length === 0) {
       return NextResponse.json(
         { success: false, error: "Add at least one valid product." },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -187,12 +186,18 @@ export async function POST(req: Request) {
             "This account already has a store linked. Please use the owner dashboard to manage it.",
           redirectUrl: "/owner/store/overview",
         },
-        { status: 409 }
+        { status: 409 },
       );
     }
 
     const baseSlug = slugify(storeName);
     const slug = `${baseSlug}-${Date.now().toString(36)}`;
+
+    const fullAddress = [address, area, city, "South Africa"]
+      .filter(Boolean)
+      .join(", ");
+
+    const geocoded = await geocodeAddress(fullAddress);
 
     const result = await prisma.$transaction(async (tx) => {
       const createdStore = await tx.store.create({
@@ -204,6 +209,9 @@ export async function POST(req: Request) {
           address,
           city,
           area,
+          lat: geocoded?.lat ?? null,
+          lng: geocoded?.lng ?? null,
+          locationVerified: Boolean(geocoded),
           avgPrepTimeMinutes,
           isOpen: false,
           supportsCollection,
@@ -215,7 +223,7 @@ export async function POST(req: Request) {
       });
 
       const uniqueCategoryNames = Array.from(
-        new Set(validProducts.map((product) => product.categoryName))
+        new Set(validProducts.map((product) => product.categoryName)),
       );
 
       for (let i = 0; i < uniqueCategoryNames.length; i++) {
@@ -256,7 +264,7 @@ export async function POST(req: Request) {
         categories.map((category) => [
           category.name.toLowerCase(),
           category.id,
-        ])
+        ]),
       );
 
       await tx.product.createMany({
@@ -331,7 +339,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json(
       { success: false, error: "Failed to complete store onboarding." },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

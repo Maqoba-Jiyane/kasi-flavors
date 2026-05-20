@@ -85,6 +85,7 @@ model Store {
   // NEW: Fulfillment
   supportsCollection Boolean @default(true)
   supportsDelivery   Boolean @default(false)
+  collectionRadiusKm Float @default(5)
 
   owner   User   @relation("StoreOwner", fields: [ownerId], references: [id])
   ownerId String @unique @db.ObjectId
@@ -97,6 +98,8 @@ model Store {
   // Optional (needed if you want distance validation)
   lat Float?
   lng Float?
+
+  locationVerified Boolean @default(false)
 
   // GLOBAL price adjustment (markup/discount) – still available on store level
   priceAdjustmentEnabled Boolean @default(false)
