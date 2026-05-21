@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import {
   buildSouthAfricanAddress,
-  geocodeAddress,
+  geocodeStoreAddress,
 } from "@/lib/location/geocode";
 
 export async function POST(req: Request) {
@@ -25,7 +25,11 @@ export async function POST(req: Request) {
       );
     }
 
-    const result = await geocodeAddress(query);
+    const result = await geocodeStoreAddress({
+  address,
+  area,
+  city,
+});
 
     if (!result) {
       return NextResponse.json(

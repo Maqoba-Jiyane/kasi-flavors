@@ -61,7 +61,7 @@ export default function SignInPage() {
           </div>
 
           <div className="mx-auto w-full max-w-md">
-            <div className="rounded-[2rem] border border-white/10 bg-white p-4 shadow-2xl sm:p-6">
+            <div className="rounded-4xl border border-white/10 bg-white p-4 shadow-2xl sm:p-6">
               <div className="mb-5">
                 <p className="text-xs font-black uppercase tracking-wide text-street-orange">
                   Sign in

@@ -142,7 +142,5 @@ export async function getCurrentUserMinimal(): Promise<MinimalUser | null> {
     select: { id: true, role: true, name: true, email: true, phone: true },
   });
 
-  console.log("getCurrentUserMinimal:", { userId, found: !!user, user });
-
   return user;
 }

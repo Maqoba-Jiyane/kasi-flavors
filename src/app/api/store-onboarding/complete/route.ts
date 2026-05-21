@@ -2,7 +2,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserMinimal } from "@/lib/auth";
-import { geocodeAddress } from "@/lib/location/geocode";
+import { geocodeStoreAddress } from "@/lib/location/geocode";
+import { revalidateTag } from "next/cache";
 
 function slugify(value: string) {
   const slug = value
@@ -197,7 +198,11 @@ export async function POST(req: Request) {
       .filter(Boolean)
       .join(", ");
 
-    const geocoded = await geocodeAddress(fullAddress);
+    const geocoded = await geocodeStoreAddress({
+      address,
+      area,
+      city,
+    });
 
     const result = await prisma.$transaction(async (tx) => {
       const createdStore = await tx.store.create({
@@ -213,6 +218,7 @@ export async function POST(req: Request) {
           lng: geocoded?.lng ?? null,
           locationVerified: Boolean(geocoded),
           avgPrepTimeMinutes,
+          approvalStatus: "PENDING_REVIEW",
           isOpen: false,
           supportsCollection,
           supportsDelivery,
@@ -325,6 +331,10 @@ export async function POST(req: Request) {
         onboardingId: completedOnboarding.id,
       };
     });
+
+    revalidateTag("stores", "max");
+    revalidateTag("stores:open-collection", "max");
+    revalidateTag("stores:all-collection", "max");
 
     return NextResponse.json({
       success: true,

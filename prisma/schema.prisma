@@ -51,10 +51,14 @@ model User {
   // A store owner owns at most one store (MVP)
   store Store? @relation("StoreOwner")
 
+  storeOnboardings StoreOnboarding[]
+
   orders Order[] @relation("CustomerOrders")
 
   // Courier assignment
   courierAssignment Courier?
+
+  approvedStores Store[] @relation("StoreApprover")
 
   // applications submitted by this user
   ownerApplications OwnerApplication[]
@@ -69,6 +73,13 @@ model User {
   Cart Cart[]
 }
 
+enum StoreApprovalStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  DEACTIVATED
+}
+
 model Store {
   id                 String  @id @default(auto()) @map("_id") @db.ObjectId
   name               String
@@ -77,18 +88,25 @@ model Store {
   address            String
   city               String
   area               String
+  postalCode         String?
   phone              String?
   avgPrepTimeMinutes Int     @default(25)
   creditCents        Int     @default(5000)
-  isOpen             Boolean @default(true)
+  isOpen             Boolean @default(false)
 
   // NEW: Fulfillment
   supportsCollection Boolean @default(true)
   supportsDelivery   Boolean @default(false)
-  collectionRadiusKm Float @default(5)
+  collectionRadiusKm Float   @default(5)
 
   owner   User   @relation("StoreOwner", fields: [ownerId], references: [id])
   ownerId String @unique @db.ObjectId
+
+  approvalStatus  StoreApprovalStatus @default(PENDING_REVIEW)
+  approvedAt      DateTime?
+  approvedById    String?             @db.ObjectId
+  approvedBy      User?               @relation("StoreApprover", fields: [approvedById], references: [id])
+  rejectionReason String?
 
   // Delivery settings (MVP)
   deliveryRadiusKm Int? // e.g. 5, 10, 15
@@ -118,6 +136,9 @@ model Store {
   Email          Email[]
   menuCategories MenuCategory[]
 
+  @@index([approvalStatus])
+  @@index([approvalStatus, isOpen])
+  @@index([city, area])
   @@index([isOpen])
   @@index([supportsDelivery])
   @@index([supportsCollection])
@@ -421,7 +442,7 @@ model CartItem {
 model StoreOnboarding {
   id String @id @default(auto()) @map("_id") @db.ObjectId
 
-  // owner     User     @relation(fields: [ownerId], references: [id])
+  owner   User   @relation(fields: [ownerId], references: [id])
   ownerId String @db.ObjectId
 
   status String @default("DRAFT")
@@ -431,6 +452,7 @@ model StoreOnboarding {
   address     String?
   area        String?
   city        String?
+  postalCode  String?
   phone       String?
 
   avgPrepTimeMinutes    Int     @default(25)
@@ -442,7 +464,7 @@ model StoreOnboarding {
 
   namingTheme ProductNamingTheme @default(DESCRIPTIVE)
 
-  menuImages        Json?
+  menuImages           Json?
   extractedMenuJson    Json?
   reviewedProductsJson Json?
 
@@ -454,4 +476,22 @@ model StoreOnboarding {
 
   @@index([ownerId])
   @@index([status])
+}
+
+model GeocodeCache {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  query    String
+  queryKey String @unique
+
+  lat         Float
+  lng         Float
+  displayName String?
+
+  provider String @default("nominatim")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([provider])
 }

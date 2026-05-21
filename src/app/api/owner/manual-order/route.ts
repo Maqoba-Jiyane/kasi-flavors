@@ -20,8 +20,6 @@ export async function POST(req: Request) {
 
     const body = await req.json();
 
-    console.log(body)
-
     const customerName =
       (body.fullName as string | undefined)?.trim() || "Walk-in Customer";
     const customerPhone = (body.phone as string | undefined)?.trim() || "";

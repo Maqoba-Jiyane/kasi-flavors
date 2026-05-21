@@ -119,7 +119,6 @@ export default async function TrackOrderPage({ params }: TrackPageProps) {
   });
 
   if (!order) {
-    console.log('track token: not found')
     notFound();
   }
 

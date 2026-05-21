@@ -133,11 +133,7 @@ export async function POST(req: Request) {
       }),
     });
 
-    console.log("Groq API response status:", response);
-
     const json = await response.json();
-
-    console.log("Groq API response JSON:", json.output[1].content);
 
     if (!response.ok) {
       if (process.env.NODE_ENV === "development") {

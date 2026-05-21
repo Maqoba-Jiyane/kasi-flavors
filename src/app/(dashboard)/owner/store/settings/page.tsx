@@ -1,7 +1,12 @@
 // app/(dashboard)/owner/store/settings/page.tsx
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser, assertRole } from "@/lib/auth";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
+import {
+  buildSouthAfricanAddress,
+  geocodeStoreAddress,
+} from "@/lib/location/geocode";
+import { StoreGeneralSettingsForm } from "@/components/owner/StoreGeneralSettingsForm";
 
 function clampInt(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -19,6 +24,9 @@ export default async function StoreGeneralSettingsPage() {
       address: true,
       city: true,
       area: true,
+      postalCode: true,
+      lat: true,
+      lng: true,
       avgPrepTimeMinutes: true,
       onlinePaymentsEnabled: true,
     },
@@ -26,7 +34,7 @@ export default async function StoreGeneralSettingsPage() {
 
   if (!store) {
     return (
-      <div className="rounded-[2rem] border border-black/10 bg-white p-6 text-sm shadow-sm">
+      <div className="rounded-4xl border border-black/10 bg-white p-6 text-sm shadow-sm">
         <p className="text-xs font-black uppercase tracking-wide text-street-orange">
           Store setup
         </p>
@@ -50,10 +58,17 @@ export default async function StoreGeneralSettingsPage() {
 
     const store = await prisma.store.findUnique({
       where: { ownerId: user.id },
-      select: { id: true },
+      select: { id: true, slug: true },
     });
 
     if (!store) throw new Error("No store linked to this account");
+
+    const postalCode = String(formData.get("postalCode") || "").trim();
+    const latRaw = String(formData.get("lat") || "").trim();
+    const lngRaw = String(formData.get("lng") || "").trim();
+
+    const formLat = latRaw ? Number(latRaw) : null;
+    const formLng = lngRaw ? Number(lngRaw) : null;
 
     const name = String(formData.get("name") || "").trim();
     const address = String(formData.get("address") || "").trim();
@@ -64,7 +79,7 @@ export default async function StoreGeneralSettingsPage() {
     const avgPrepTimeMinutes = clampInt(
       Number.isFinite(avgPrepRaw) ? avgPrepRaw : 25,
       5,
-      180
+      180,
     );
 
     const onlinePaymentsEnabled =
@@ -74,6 +89,35 @@ export default async function StoreGeneralSettingsPage() {
     if (!address) throw new Error("Address is required");
     if (!city) throw new Error("City is required");
 
+    const fullAddress = buildSouthAfricanAddress([address, area, city]);
+    let geocoded: {
+      lat: number;
+      lng: number;
+      precision?: string;
+    } | null = null;
+
+    if (
+      formLat !== null &&
+      formLng !== null &&
+      Number.isFinite(formLat) &&
+      Number.isFinite(formLng)
+    ) {
+      geocoded = {
+        lat: formLat,
+        lng: formLng,
+        precision: "EXACT_ADDRESS",
+      };
+    } else {
+      geocoded = await geocodeStoreAddress({
+        address,
+        area,
+        city,
+        postalCode,
+      });
+    }
+
+    console.log("fullAddress: ", fullAddress, "geocoded: ", geocoded);
+
     await prisma.store.update({
       where: { id: store.id },
       data: {
@@ -81,16 +125,34 @@ export default async function StoreGeneralSettingsPage() {
         address,
         city,
         area,
+        postalCode,
+        ...(geocoded
+          ? {
+              lat: geocoded.lat,
+              lng: geocoded.lng,
+              locationVerified: geocoded.precision === "EXACT_ADDRESS",
+            }
+          : {
+              locationVerified: false,
+            }),
         avgPrepTimeMinutes,
         onlinePaymentsEnabled,
       },
     });
 
+    revalidateTag("stores", "max");
+    revalidateTag("stores:open-collection", "max");
+    revalidateTag("stores:all-collection", "max");
+    revalidateTag(`store:${store.slug}`, "max");
+    revalidateTag(`store-menu:${store.slug}`, "max");
+
+    revalidatePath("/");
     revalidatePath("/owner/store/settings");
+    revalidatePath(`/stores/${store.slug}`);
   }
 
   return (
-    <section className="rounded-[2rem] border border-black/10 bg-white p-5 shadow-sm">
+    <section className="rounded-4xl border border-black/10 bg-white p-5 shadow-sm">
       <p className="text-xs font-black uppercase tracking-wide text-street-orange">
         General settings
       </p>
@@ -104,91 +166,7 @@ export default async function StoreGeneralSettingsPage() {
         your store.
       </p>
 
-      <form action={save} className="mt-6 grid gap-4 text-sm">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Store name">
-            <input
-              name="name"
-              defaultValue={store.name}
-              className={inputCls}
-              required
-            />
-          </Field>
-
-          <Field label="Avg prep time minutes">
-            <input
-              name="avgPrepTimeMinutes"
-              type="number"
-              min={5}
-              max={180}
-              defaultValue={store.avgPrepTimeMinutes}
-              className={inputCls}
-              required
-            />
-          </Field>
-        </div>
-
-        <Field label="Address">
-          <input
-            name="address"
-            defaultValue={store.address}
-            className={inputCls}
-            required
-          />
-        </Field>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="City">
-            <input
-              name="city"
-              defaultValue={store.city}
-              className={inputCls}
-              required
-            />
-          </Field>
-
-          <Field label="Area optional">
-            <input
-              name="area"
-              defaultValue={store.area}
-              className={inputCls}
-              placeholder="e.g. Diepkloof"
-            />
-          </Field>
-        </div>
-
-        <div className="rounded-[1.5rem] border border-black/10 bg-kasi-cream p-4">
-          <label className="flex items-start justify-between gap-4">
-            <div>
-              <span className="text-sm font-black text-kasi-black">
-                Enable online payments
-              </span>
-
-              <span className="mt-1 block text-xs font-medium leading-5 text-black/55">
-                Customers will only be able to pay online when this is enabled.
-                Cash on collection or delivery can still be used depending on
-                your checkout setup.
-              </span>
-            </div>
-
-            <input
-              name="onlinePaymentsEnabled"
-              type="checkbox"
-              defaultChecked={store.onlinePaymentsEnabled}
-              className="mt-1 h-4 w-4 accent-kasi-green"
-            />
-          </label>
-        </div>
-
-        <div className="flex justify-end">
-          <button
-            type="submit"
-            className="inline-flex rounded-full bg-kasi-green px-5 py-3 text-sm font-black text-white shadow-sm transition hover:bg-street-orange"
-          >
-            Save changes
-          </button>
-        </div>
-      </form>
+      <StoreGeneralSettingsForm store={store} action={save} />
     </section>
   );
 }
