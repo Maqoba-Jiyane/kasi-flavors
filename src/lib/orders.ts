@@ -5,6 +5,12 @@ import { applyPriceAdjustment } from "./pricing";
 const MAX_ITEMS = 5;
 const MAX_QTY_PER_ITEM = 5;
 
+function clampQuantity(value: unknown) {
+  const qty = Math.floor(Number(value));
+  if (!Number.isFinite(qty)) return 1;
+  return Math.max(1, Math.min(MAX_QTY_PER_ITEM, qty));
+}
+
 export async function createOrderFromPayload(args: {
   storeId: string;
   items: { productId: string; quantity: number }[];
@@ -19,7 +25,7 @@ export async function createOrderFromPayload(args: {
   deliveryAddress?: string | null;
   deliveryLat?: number | null;
   deliveryLng?: number | null;
-  deliveryFeeCents?: number; // NEW: delivery fee to add to total
+  deliveryFeeCents?: number;
 }) {
   const {
     storeId,
@@ -31,92 +37,130 @@ export async function createOrderFromPayload(args: {
     note,
     customerId,
     idempotencyKey,
-    paymentMethod = "CASH_ON_DELIVERY",
+    paymentMethod = "CASH_ON_COLLECTION",
     deliveryAddress,
     deliveryLat,
     deliveryLng,
     deliveryFeeCents = 0,
   } = args;
 
-  // Basic validation
   if (!storeId) throw new Error("Missing store id");
-  if (!items || !Array.isArray(items) || items.length === 0)
+  if (!Array.isArray(items) || items.length === 0) {
     throw new Error("Cart empty");
-  if (!fullName) throw new Error("Missing name");
-  if (!email) throw new Error("Missing email");
+  }
+  if (items.length > MAX_ITEMS) {
+    throw new Error(`Maximum ${MAX_ITEMS} items allowed per order`);
+  }
+  if (!fullName.trim()) throw new Error("Missing name");
+  if (!email.trim()) throw new Error("Missing email");
 
-  const store = await prisma.store.findUnique({ where: { id: storeId } });
-  
-  if (!store) throw new Error("Store not found");
-  // cast to any so TS doesn't complain about newly added fields
-  const storeAny = store as any;
-
-  const count = await prisma.order.count({
-    where: {
-      storeId: store.id,
-      NOT: {
-        status: "COMPLETED"
-      }
-    }
-  })
-
-  const productIds = items.map((i) => i.productId);
-  const products = await prisma.product.findMany({
-    where: { id: { in: productIds }, storeId: store.id },
+  const store = await prisma.store.findUnique({
+    where: { id: storeId },
+    select: {
+      id: true,
+      name: true,
+      avgPrepTimeMinutes: true,
+      priceAdjustmentEnabled: true,
+      priceAdjustmentPercent: true,
+    },
   });
 
-  if (products.length === 0)
+  if (!store) throw new Error("Store not found");
+
+  const activeOrderCount = await prisma.order.count({
+    where: {
+      storeId: store.id,
+      status: {
+        in: ["PENDING", "ACCEPTED", "IN_PREPARATION", "READY_FOR_COLLECTION"],
+      },
+    },
+  });
+
+  const productIds = Array.from(new Set(items.map((item) => item.productId)));
+
+  const products = await prisma.product.findMany({
+    where: {
+      id: { in: productIds },
+      storeId: store.id,
+      isAvailable: true,
+    },
+    select: {
+      id: true,
+      name: true,
+      priceCents: true,
+      priceAdjustmentEnabled: true,
+      priceAdjustmentPercent: true,
+    },
+  });
+
+  if (products.length === 0) {
     throw new Error("No products found for this order");
+  }
 
-  const prodMap = new Map(products.map((p) => [p.id, p]));
+  const productMap = new Map(products.map((product) => [product.id, product]));
 
-  let totalCents = 0;
-  const orderItemsData = items.map((i) => {
-    const product = prodMap.get(i.productId);
+  let subtotalCents = 0;
+
+  const orderItemsData = items.map((item) => {
+    const product = productMap.get(item.productId);
+
     if (!product) {
-      throw new Error(`Product ${i.productId} not found in store`);
+      throw new Error(`Product ${item.productId} not found in store`);
     }
-    const qty = Math.max(1, Number(i.quantity) || 1);
-    // apply product-level adjustment first, then store-level
-    let unitCents = product.priceCents;
-    if ((product as any).priceAdjustmentEnabled && (product as any).priceAdjustmentPercent) {
+
+    const quantity = clampQuantity(item.quantity);
+
+    const baseUnitCents = product.priceCents;
+
+    let unitCents = baseUnitCents;
+
+    if (product.priceAdjustmentEnabled && product.priceAdjustmentPercent) {
       unitCents = applyPriceAdjustment(
         unitCents,
-        (product as any).priceAdjustmentEnabled,
-        (product as any).priceAdjustmentPercent,
+        product.priceAdjustmentEnabled,
+        product.priceAdjustmentPercent,
       );
     }
-    if (storeAny.priceAdjustmentEnabled && storeAny.priceAdjustmentPercent) {
+
+    if (store.priceAdjustmentEnabled && store.priceAdjustmentPercent) {
       unitCents = applyPriceAdjustment(
         unitCents,
-        storeAny.priceAdjustmentEnabled,
-        storeAny.priceAdjustmentPercent,
+        store.priceAdjustmentEnabled,
+        store.priceAdjustmentPercent,
       );
     }
-    const totalItemCents = unitCents * qty;
-    totalCents += totalItemCents;
+
+    const totalItemCents = unitCents * quantity;
+    subtotalCents += totalItemCents;
 
     return {
       productId: product.id,
       name: product.name,
-      quantity: qty,
+      quantity,
+      baseUnitCents,
       unitCents,
       totalCents: totalItemCents,
     };
   });
 
-  // Add delivery fee to total
-  totalCents += deliveryFeeCents;
+  const safeDeliveryFeeCents =
+    Number.isFinite(deliveryFeeCents) && deliveryFeeCents > 0
+      ? Math.round(deliveryFeeCents)
+      : 0;
+
+  const totalCents = subtotalCents + safeDeliveryFeeCents;
 
   const pickupCode = generatePickupCode();
-  const estimatedReadyAt = new Date();
-  estimatedReadyAt.setMinutes(
-    (estimatedReadyAt.getMinutes() + (store.avgPrepTimeMinutes || 25) * (count + 1))
-  );
   const trackingToken = randomUUID();
 
-  // If you still want to fallback by email:
+  const estimatedReadyAt = new Date();
+  estimatedReadyAt.setMinutes(
+    estimatedReadyAt.getMinutes() +
+      (store.avgPrepTimeMinutes || 25) * (activeOrderCount + 1),
+  );
+
   let customerRelation = undefined;
+
   if (customerId) {
     customerRelation = { connect: { id: customerId } };
   } else {
@@ -124,38 +168,51 @@ export async function createOrderFromPayload(args: {
       where: { email },
       select: { id: true },
     });
+
     if (customer) {
       customerRelation = { connect: { id: customer.id } };
     }
   }
 
-    const created = await prisma.order.create({
+  const created = await prisma.order.create({
     data: {
       store: { connect: { id: store.id } },
       customer: customerRelation,
-      customerName: fullName,
-      customerPhone: phone ?? "",
-      customerEmail: email,
+
+      customerName: fullName.trim(),
+      customerPhone: phone || null,
+      customerEmail: email.trim(),
+
       fulfilmentType,
       paymentMethod,
-      status: paymentMethod === "ONLINE_PAYMENT" ? "ACCEPTED" : "PENDING",
+
+      // For online payment, keep PENDING until Yoco confirms payment.
+      status: "PENDING",
+
       totalCents,
-      deliveryFeeCents: deliveryFeeCents > 0 ? deliveryFeeCents : null,
-      deliveryAddress: deliveryAddress || (fulfilmentType === "DELIVERY" ? "" : null),
+      deliveryFeeCents: safeDeliveryFeeCents > 0 ? safeDeliveryFeeCents : null,
+      deliveryAddress:
+        deliveryAddress || (fulfilmentType === "DELIVERY" ? "" : null),
       deliveryLat: deliveryLat ?? null,
       deliveryLng: deliveryLng ?? null,
-      note: note ?? null,
+      note: note?.trim() || null,
+
       pickupCode,
       trackingToken,
       estimatedReadyAt,
       idempotencyKey: idempotencyKey ?? randomUUID(),
+
+      platformFeeCents: 0,
+      platformFeePaid: false,
+
       items: {
-        create: orderItemsData.map((it) => ({
-          productId: it.productId,
-          name: it.name,
-          quantity: it.quantity,
-          unitCents: it.unitCents,
-          totalCents: it.totalCents,
+        create: orderItemsData.map((item) => ({
+          productId: item.productId,
+          name: item.name,
+          quantity: item.quantity,
+          baseUnitCents: item.baseUnitCents,
+          unitCents: item.unitCents,
+          totalCents: item.totalCents,
         })),
       },
     },

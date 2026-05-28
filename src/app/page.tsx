@@ -327,7 +327,7 @@ export default async function HomePage({
             </p>
 
             <div className="mt-5 flex flex-wrap gap-2">
-              <Link
+              {/* <Link
                 href={`/?lat=${customerLat}&lng=${customerLng}&address=${encodeURIComponent(
                   address,
                 )}&area=${encodeURIComponent(
@@ -340,7 +340,7 @@ export default async function HomePage({
                 className="kf-btn-primary inline-flex"
               >
                 Show further stores
-              </Link>
+              </Link> */}
 
               <Link href="/" className="kf-btn-secondary inline-flex">
                 Reset location

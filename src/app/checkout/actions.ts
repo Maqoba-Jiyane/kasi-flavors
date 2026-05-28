@@ -72,11 +72,34 @@ export async function placeOrderAction(formData: FormData) {
 
   // Calculate totals
   let totalCents = 0;
+
   const itemsWithPricing = payload.items.map((item) => {
-    const product = products.find((p) => p.id === item.productId)!;
-    const lineTotal = product.priceCents * item.quantity;
+    const product = products.find((p) => p.id === item.productId);
+
+    if (!product) {
+      throw new Error("Product not found");
+    }
+
+    const quantity = Math.max(1, Math.min(5, item.quantity));
+
+    const baseUnitCents = product.priceCents;
+
+    // This old checkout action does not currently apply price adjustments.
+    // So for now, unitCents equals baseUnitCents.
+    // If you want adjustments here too, use applyPriceAdjustment like in createOrderFromPayload.
+    const unitCents = baseUnitCents;
+
+    const lineTotal = unitCents * quantity;
+
     totalCents += lineTotal;
-    return { product, quantity: item.quantity, lineTotal };
+
+    return {
+      product,
+      quantity,
+      baseUnitCents,
+      unitCents,
+      lineTotal,
+    };
   });
 
   const now = new Date();
@@ -106,10 +129,15 @@ export async function placeOrderAction(formData: FormData) {
       customerId: payload.customerId,
       items: {
         create: itemsWithPricing.map((i) => ({
-          productId: i.product.id,
+          product: {
+            connect: {
+              id: i.product.id,
+            },
+          },
           name: i.product.name,
           quantity: i.quantity,
-          unitCents: i.product.priceCents,
+          baseUnitCents: i.baseUnitCents,
+          unitCents: i.unitCents,
           totalCents: i.lineTotal,
         })),
       },

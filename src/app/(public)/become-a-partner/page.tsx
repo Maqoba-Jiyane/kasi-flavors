@@ -25,7 +25,7 @@ export default async function BecomePartnerPage() {
     redirect("/sign-in?redirect_url=/become-a-partner");
   }
 
-  if(user.role === "STORE_OWNER"){
+  if (user.role === "STORE_OWNER") {
     redirect("/owner/store/overview");
   }
 
@@ -84,6 +84,9 @@ export default async function BecomePartnerPage() {
                   address: savedOnboarding.address,
                   area: savedOnboarding.area,
                   city: savedOnboarding.city,
+                  postalCode: savedOnboarding.postalCode,
+                  lat: savedOnboarding.lat,
+                  lng: savedOnboarding.lng,
                   phone: savedOnboarding.phone,
                   avgPrepTimeMinutes: savedOnboarding.avgPrepTimeMinutes,
                   supportsCollection: savedOnboarding.supportsCollection,

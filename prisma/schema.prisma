@@ -260,25 +260,27 @@ model Order {
   customerPhone  String?
   customerEmail  String?
   fulfilmentType FulfilmentType
-  paymentMethod  PaymentMethod  @default(CASH_ON_DELIVERY)
+  paymentMethod  PaymentMethod  @default(CASH_ON_COLLECTION)
   status         OrderStatus    @default(PENDING)
 
   totalCents       Int
-  deliveryFeeCents Int? // Delivery fee charged (separate from items)
+  deliveryFeeCents Int?
   deliveryAddress  String?
   note             String?
 
   source           OrderSource @default(CUSTOMER)
-  createdByOwnerId String?     @db.ObjectId // owner who created order (if source = MANUAL)
+  createdByOwnerId String?     @db.ObjectId
 
   pickupCode    String @unique
   trackingToken String @unique
 
-  // 👇 NEW: client-provided idempotency key for checkout
   idempotencyKey String? @unique
 
-  // For online payments
   checkoutId String?
+
+  // Platform fee/discount adjustment snapshot
+  platformFeeCents Int     @default(0)
+  platformFeePaid  Boolean @default(false)
 
   estimatedReadyAt DateTime?
   completedAt      DateTime?
@@ -305,8 +307,13 @@ model OrderItem {
   product   Product @relation(fields: [productId], references: [id])
   productId String  @db.ObjectId
 
-  name       String
-  quantity   Int
+  name     String
+  quantity Int
+
+  // Original product price before platform adjustment
+  baseUnitCents Int
+
+  // Customer-facing price after adjustment
   unitCents  Int
   totalCents Int
 
@@ -453,6 +460,8 @@ model StoreOnboarding {
   area        String?
   city        String?
   postalCode  String?
+  lat         Float?
+  lng         Float?
   phone       String?
 
   avgPrepTimeMinutes    Int     @default(25)

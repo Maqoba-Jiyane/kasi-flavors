@@ -12,6 +12,11 @@ export type MenuItem = {
   priceCents: number;
   imageUrl?: string | null;
   isAvailable: boolean;
+
+  categoryId?: string | null;
+  categoryName?: string | null;
+  categorySlug?: string | null;
+  categorySortOrder?: number | null;
 };
 
 interface MenuItemCardProps {

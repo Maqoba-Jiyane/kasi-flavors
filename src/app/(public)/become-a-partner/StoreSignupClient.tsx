@@ -3,6 +3,7 @@
 
 import * as React from "react";
 import { Loader2, Plus, Trash2, UploadCloud } from "lucide-react";
+import dynamic from "next/dynamic";
 
 type SavedOnboarding = {
   id: string;
@@ -12,6 +13,9 @@ type SavedOnboarding = {
   address: string | null;
   area: string | null;
   city: string | null;
+  postalCode: string | null;
+  lat: number | null;
+  lng: number | null;
   phone: string | null;
   avgPrepTimeMinutes: number;
   supportsCollection: boolean;
@@ -51,6 +55,9 @@ type StoreDraft = {
   address: string;
   area: string;
   city: string;
+  postalCode: string;
+  lat: number | null;
+  lng: number | null;
   phone: string;
   avgPrepTimeMinutes: number;
   supportsCollection: boolean;
@@ -72,6 +79,9 @@ const emptyStore: StoreDraft = {
   address: "",
   area: "",
   city: "",
+  postalCode: "",
+  lat: null,
+  lng: null,
   phone: "",
   avgPrepTimeMinutes: 25,
   supportsCollection: true,
@@ -81,6 +91,21 @@ const emptyStore: StoreDraft = {
   onlinePaymentsEnabled: false,
   namingTheme: "DESCRIPTIVE",
 };
+
+const StoreLocationPicker = dynamic(
+  () =>
+    import("@/components/onboarding/StoreLocationPicker").then(
+      (mod) => mod.StoreLocationPicker,
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-80 items-center justify-center rounded-3xl border border-black/10 bg-kasi-cream text-sm font-bold text-black/55">
+        Loading map...
+      </div>
+    ),
+  },
+);
 
 function newDraftProduct(): DraftProduct {
   return {
@@ -120,6 +145,9 @@ function buildStoreFromSaved(saved?: SavedOnboarding | null): StoreDraft {
     address: saved.address ?? "",
     area: saved.area ?? "",
     city: saved.city ?? "",
+    postalCode: saved.postalCode ?? "",
+    lat: typeof saved.lat === "number" ? saved.lat : null,
+    lng: typeof saved.lng === "number" ? saved.lng : null,
     phone: saved.phone ?? "",
     avgPrepTimeMinutes: saved.avgPrepTimeMinutes ?? 25,
     supportsCollection: saved.supportsCollection ?? true,
@@ -155,27 +183,27 @@ function buildProductsFromSaved(
     return [newDraftProduct()];
   }
 
-const products: DraftProduct[] = source
-  .map((item: any) => ({
-    id: cryptoRandom(),
-    name: String(item?.name || "").trim(),
-    description: String(item?.description || "").trim(),
-    categoryName:
-      String(item?.categoryName || item?.category || "Menu").trim() || "Menu",
-    priceCents: Number(item?.priceCents || 0),
-    imagePrompt: String(item?.imagePrompt || "").trim(),
-    imageUrl: String(item?.imageUrl || "").trim(),
-    isAvailable: item?.isAvailable !== false,
-    priceAdjustmentEnabled: Boolean(item?.priceAdjustmentEnabled),
-    priceAdjustmentPercent: Number(item?.priceAdjustmentPercent || 0),
-    namingConfidence:
-      item?.namingConfidence === "HIGH" ||
-      item?.namingConfidence === "MEDIUM" ||
-      item?.namingConfidence === "LOW"
-        ? item.namingConfidence
-        : "MEDIUM",
-  }))
-  .filter((item) => item.name || item.priceCents > 0);
+  const products: DraftProduct[] = source
+    .map((item: any) => ({
+      id: cryptoRandom(),
+      name: String(item?.name || "").trim(),
+      description: String(item?.description || "").trim(),
+      categoryName:
+        String(item?.categoryName || item?.category || "Menu").trim() || "Menu",
+      priceCents: Number(item?.priceCents || 0),
+      imagePrompt: String(item?.imagePrompt || "").trim(),
+      imageUrl: String(item?.imageUrl || "").trim(),
+      isAvailable: item?.isAvailable !== false,
+      priceAdjustmentEnabled: Boolean(item?.priceAdjustmentEnabled),
+      priceAdjustmentPercent: Number(item?.priceAdjustmentPercent || 0),
+      namingConfidence:
+        item?.namingConfidence === "HIGH" ||
+        item?.namingConfidence === "MEDIUM" ||
+        item?.namingConfidence === "LOW"
+          ? item.namingConfidence
+          : "MEDIUM",
+    }))
+    .filter((item) => item.name || item.priceCents > 0);
 
   return products.length > 0 ? products : [newDraftProduct()];
 }
@@ -288,27 +316,28 @@ export function StoreSignupClient({
         return;
       }
 
-const extractedProducts: DraftProduct[] = Array.isArray(json.products)
-  ? json.products.map((item: any) => ({
-      id: cryptoRandom(),
-      name: String(item.name || "").trim(),
-      description: String(item.description || "").trim(),
-      categoryName:
-        String(item.categoryName || item.category || "Menu").trim() || "Menu",
-      priceCents: Number(item.priceCents || 0),
-      imagePrompt: String(item.imagePrompt || "").trim(),
-      imageUrl: "",
-      isAvailable: true,
-      priceAdjustmentEnabled: false,
-      priceAdjustmentPercent: 0,
-      namingConfidence:
-        item.namingConfidence === "HIGH" ||
-        item.namingConfidence === "MEDIUM" ||
-        item.namingConfidence === "LOW"
-          ? item.namingConfidence
-          : "MEDIUM",
-    }))
-  : [];
+      const extractedProducts: DraftProduct[] = Array.isArray(json.products)
+        ? json.products.map((item: any) => ({
+            id: cryptoRandom(),
+            name: String(item.name || "").trim(),
+            description: String(item.description || "").trim(),
+            categoryName:
+              String(item.categoryName || item.category || "Menu").trim() ||
+              "Menu",
+            priceCents: Number(item.priceCents || 0),
+            imagePrompt: String(item.imagePrompt || "").trim(),
+            imageUrl: "",
+            isAvailable: true,
+            priceAdjustmentEnabled: false,
+            priceAdjustmentPercent: 0,
+            namingConfidence:
+              item.namingConfidence === "HIGH" ||
+              item.namingConfidence === "MEDIUM" ||
+              item.namingConfidence === "LOW"
+                ? item.namingConfidence
+                : "MEDIUM",
+          }))
+        : [];
 
       if (extractedProducts.length === 0) {
         setError("No menu items were found. You can add them manually below.");
@@ -415,10 +444,19 @@ const extractedProducts: DraftProduct[] = Array.isArray(json.products)
         isAvailable: product.isAvailable,
         priceAdjustmentEnabled: product.priceAdjustmentEnabled,
         priceAdjustmentPercent: product.priceAdjustmentPercent,
+        categoryName: product.categoryName
       }));
 
     try {
       setSubmitting(true);
+
+      // console.log(
+      //   "[submit onboarding] product categories:",
+      //   finalProducts.map((product) => ({
+      //     name: product.name,
+      //     categoryName: product.categoryName,
+      //   })),
+      // );
 
       const res = await fetch("/api/store-onboarding/complete", {
         method: "POST",
@@ -456,7 +494,7 @@ const extractedProducts: DraftProduct[] = Array.isArray(json.products)
   }
 
   return (
-    <div className="rounded-[2rem] border border-black/10 bg-white p-4 shadow-sm sm:p-6">
+    <div className="rounded-4xl border border-black/10 bg-white p-4 shadow-sm sm:p-6">
       <div className="flex flex-col gap-3 border-b border-black/10 pb-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-xs font-black uppercase tracking-wide text-street-orange">
@@ -472,7 +510,7 @@ const extractedProducts: DraftProduct[] = Array.isArray(json.products)
             review the digitised products before saving.
           </p>
 
-          <div className="mt-4 rounded-[1.5rem] border border-black/10 bg-kasi-cream p-4">
+          <div className="mt-4 rounded-3xl border border-black/10 bg-kasi-cream p-4">
             <p className="text-xs font-black uppercase tracking-wide text-black/45">
               Signed in account
             </p>
@@ -492,7 +530,7 @@ const extractedProducts: DraftProduct[] = Array.isArray(json.products)
             </p>
 
             {savedOnboarding && (
-              <div className="mt-4 rounded-[1.5rem] border border-kasi-green/20 bg-kasi-green/10 p-4">
+              <div className="mt-4 rounded-3xl border border-kasi-green/20 bg-kasi-green/10 p-4">
                 <p className="text-xs font-black uppercase tracking-wide text-kasi-green">
                   Draft restored
                 </p>
@@ -647,6 +685,65 @@ function StoreDetailsStep({
     value: StoreDraft[K],
   ) => void;
 }) {
+  const hasCoords =
+    typeof store.lat === "number" &&
+    typeof store.lng === "number" &&
+    Number.isFinite(store.lat) &&
+    Number.isFinite(store.lng);
+
+  async function useCurrentLocation() {
+    if (!navigator.geolocation) {
+      alert("Your browser does not support location sharing.");
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+
+        updateStore("lat", lat);
+        updateStore("lng", lng);
+
+        try {
+          const res = await fetch("/api/location/reverse-geocode", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            cache: "no-store",
+            body: JSON.stringify({ lat, lng }),
+          });
+
+          const data = await res.json();
+
+          if (!res.ok || !data?.success) {
+            return;
+          }
+
+          const found = data.location;
+
+          if (found.address) updateStore("address", found.address);
+          if (found.area) updateStore("area", found.area);
+          if (found.city) updateStore("city", found.city);
+          if (found.postalCode) updateStore("postalCode", found.postalCode);
+        } catch {
+          // Coordinates are still useful even if address lookup fails.
+        }
+      },
+      () => {
+        alert(
+          "We could not access your location. Please allow location access or place the pin manually.",
+        );
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 60_000,
+      },
+    );
+  }
+
   return (
     <div>
       <SectionHeading
@@ -686,6 +783,46 @@ function StoreDetailsStep({
           />
         </Field>
 
+        <div className="rounded-3xl border border-black/10 bg-kasi-cream p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-sm font-black text-kasi-black">
+                Store location
+              </p>
+
+              <p className="mt-1 text-xs font-medium leading-5 text-black/55">
+                Use your current location, then adjust the pin to the exact
+                store entrance or collection point.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={useCurrentLocation}
+              className="rounded-full bg-kasi-green px-5 py-3 text-sm font-black text-white transition hover:bg-street-orange"
+            >
+              Use current location
+            </button>
+          </div>
+
+          {hasCoords && (
+            <p className="mt-3 text-xs font-bold text-black/50">
+              Coordinates: {store.lat!.toFixed(6)}, {store.lng!.toFixed(6)}
+            </p>
+          )}
+
+          <div className="mt-4">
+            <StoreLocationPicker
+              lat={store.lat}
+              lng={store.lng}
+              onChange={({ lat, lng }) => {
+                updateStore("lat", lat);
+                updateStore("lng", lng);
+              }}
+            />
+          </div>
+        </div>
+
         <Field label="Store address">
           <input
             value={store.address}
@@ -695,13 +832,13 @@ function StoreDetailsStep({
           />
         </Field>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-3">
           <Field label="Area">
             <input
               value={store.area}
               onChange={(e) => updateStore("area", e.target.value)}
               className={inputCls}
-              placeholder="e.g. Diepkloof"
+              placeholder="e.g. Olievenhoutbosch"
             />
           </Field>
 
@@ -710,7 +847,17 @@ function StoreDetailsStep({
               value={store.city}
               onChange={(e) => updateStore("city", e.target.value)}
               className={inputCls}
-              placeholder="e.g. Soweto"
+              placeholder="e.g. Centurion"
+            />
+          </Field>
+
+          <Field label="Postal code">
+            <input
+              value={store.postalCode}
+              onChange={(e) => updateStore("postalCode", e.target.value)}
+              className={inputCls}
+              placeholder="e.g. 0187"
+              inputMode="numeric"
             />
           </Field>
         </div>
@@ -746,6 +893,7 @@ function StoreDetailsStep({
             <option value="STORE_BRANDED">Store Branded</option>
           </select>
         </Field>
+
         <p className="text-xs font-medium text-black/55">
           If your menu items do not have clear names, AI will generate names
           using this style.
@@ -781,12 +929,12 @@ function OperationsStep({
             onChange={(checked) => updateStore("supportsCollection", checked)}
           />
 
-          <ToggleCard
+          {/* <ToggleCard
             title="Delivery"
             text="Customers can request delivery if your store supports it."
             checked={store.supportsDelivery}
             onChange={(checked) => updateStore("supportsDelivery", checked)}
-          />
+          /> */}
         </div>
 
         {store.supportsDelivery && (
@@ -852,7 +1000,7 @@ function MenuUploadStep({
         text="Upload clear pictures of your current menu. Make sure item names and prices are readable."
       />
 
-      <label className="mt-5 flex cursor-pointer flex-col items-center justify-center rounded-[2rem] border-2 border-dashed border-black/15 bg-kasi-cream px-6 py-10 text-center transition hover:border-kasi-green hover:bg-kasi-green/5">
+      <label className="mt-5 flex cursor-pointer flex-col items-center justify-center rounded-4xl border-2 border-dashed border-black/15 bg-kasi-cream px-6 py-10 text-center transition hover:border-kasi-green hover:bg-kasi-green/5">
         <UploadCloud className="h-10 w-10 text-kasi-green" />
 
         <span className="mt-3 text-lg font-black text-kasi-black">
@@ -876,7 +1024,7 @@ function MenuUploadStep({
       </label>
 
       {menuFiles.length > 0 && (
-        <div className="mt-4 rounded-[1.5rem] border border-black/10 bg-white p-4">
+        <div className="mt-4 rounded-3xl border border-black/10 bg-white p-4">
           <p className="text-xs font-black uppercase tracking-wide text-black/45">
             Uploaded files
           </p>
@@ -933,7 +1081,7 @@ function ProductsReviewStep({
         {products.map((product, index) => (
           <div
             key={product.id}
-            className="rounded-[1.5rem] border border-black/10 bg-kasi-cream p-4"
+            className="rounded-3xl border border-black/10 bg-kasi-cream p-4"
           >
             <div className="mb-4 flex items-center justify-between gap-3">
               <p className="text-xs font-black uppercase tracking-wide text-black/45">
@@ -1107,7 +1255,7 @@ function FinalReviewStep({
       />
 
       <div className="mt-5 grid gap-4 lg:grid-cols-2">
-        <div className="rounded-[1.5rem] border border-black/10 bg-kasi-cream p-4">
+        <div className="rounded-3xl border border-black/10 bg-kasi-cream p-4">
           <p className="text-xs font-black uppercase tracking-wide text-black/45">
             Store
           </p>
@@ -1126,7 +1274,7 @@ function FinalReviewStep({
           </p>
         </div>
 
-        <div className="rounded-[1.5rem] border border-black/10 bg-kasi-black p-4 text-white">
+        <div className="rounded-3xl border border-black/10 bg-kasi-black p-4 text-white">
           <p className="text-xs font-black uppercase tracking-wide text-golden-yellow">
             Menu summary
           </p>
@@ -1159,7 +1307,7 @@ function FinalReviewStep({
         </div>
       </div>
 
-      <div className="mt-5 rounded-[1.5rem] border border-black/10 bg-white p-4">
+      <div className="mt-5 rounded-3xl border border-black/10 bg-white p-4">
         <p className="text-xs font-black uppercase tracking-wide text-black/45">
           Products
         </p>
@@ -1229,7 +1377,7 @@ function ToggleCard({
   return (
     <label
       className={[
-        "cursor-pointer rounded-[1.5rem] border-2 p-4 transition",
+        "cursor-pointer rounded-3xl border-2 p-4 transition",
         checked
           ? "border-kasi-green bg-kasi-green/10"
           : "border-black/10 bg-white hover:border-kasi-green/40",

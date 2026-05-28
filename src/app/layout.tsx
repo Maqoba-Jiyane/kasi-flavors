@@ -8,6 +8,7 @@ import { getCartForUser, getEmptyCart } from "@/lib/cart";
 import { getCurrentUserMinimal } from "@/lib/auth";
 import { ToasterProvider } from "@/components/ui/ToasterProvider";
 import Footer from "@/components/Footer";
+import Script from "next/script";
 
 const poppins = Poppins({
   variable: "--font-poppins",
@@ -111,7 +112,12 @@ export default async function RootLayout({
           <ToasterProvider />
 
           <main className="flex-1">{children}</main>
-
+          <Script
+            id="ga-loader"
+            src="https://www.googletagmanager.com/gtag/js?id=G-62C87TEDWK"
+            async
+            strategy="afterInteractive"
+          />
           <Footer />
         </body>
       </html>

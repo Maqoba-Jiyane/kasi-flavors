@@ -54,7 +54,7 @@ export function KasiLaunchLanding() {
             </p>
           </div>
 
-          <div className="rounded-[2rem] border border-white/10 bg-white/10 p-5 shadow-2xl backdrop-blur sm:p-6">
+          <div className="rounded-4xl border border-white/10 bg-white/10 p-5 shadow-2xl backdrop-blur sm:p-6">
             <p className="text-xs font-black uppercase tracking-wide text-golden-yellow">
               We are almost ready
             </p>
@@ -72,9 +72,9 @@ export function KasiLaunchLanding() {
               <LaunchCountdown />
             </div>
 
-            <div className="mt-6 rounded-[1.5rem] bg-white/10 p-4">
+            <div className="mt-6 rounded-3xl bg-white/10 p-4">
               <p className="text-sm font-black text-white">
-                Own a kota spot, chips shop, grill, or food stall?
+                Own a kota spot, grill, or food stall?
               </p>
 
               <p className="mt-1 text-xs font-medium leading-5 text-white/60">

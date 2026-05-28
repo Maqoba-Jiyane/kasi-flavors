@@ -1,9 +1,11 @@
 // app/api/store-onboarding/complete/route.ts
+
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserMinimal } from "@/lib/auth";
 import { geocodeStoreAddress } from "@/lib/location/geocode";
 import { revalidateTag } from "next/cache";
+import { sendStoreOnboardingSuccessEmail } from "@/lib/email/send-store-onboarding-email";
 
 function slugify(value: string) {
   const slug = value
@@ -13,7 +15,7 @@ function slugify(value: string) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 
-  return slug || "menu";
+  return slug || "store";
 }
 
 function normalizePriceCents(value: unknown) {
@@ -25,7 +27,7 @@ function normalizePriceCents(value: unknown) {
 function normalizePercent(value: unknown) {
   const n = Number(value);
   if (!Number.isFinite(n)) return 0;
-  return n;
+  return Math.max(-100, Math.min(100, n));
 }
 
 function normalizeCategoryName(value: unknown) {
@@ -39,29 +41,60 @@ function normalizePrepTime(value: unknown) {
   return Math.max(5, Math.min(180, Math.round(n)));
 }
 
-function normalizeDeliveryRadius(value: unknown) {
+function normalizeOptionalCoordinate(value: unknown) {
+  if (value === null || value === undefined || value === "") return null;
+
   const n = Number(value);
-  if (!Number.isFinite(n) || n <= 0) return null;
+  if (!Number.isFinite(n)) return null;
+
   return n;
 }
 
 function normalizeProducts(productsInput: unknown[]) {
   return productsInput
-    .map((product: any) => ({
-      name: String(product?.name || "").trim(),
-      description: product?.description
-        ? String(product.description).trim()
-        : null,
-      categoryName: normalizeCategoryName(
-        product?.categoryName || product?.category,
-      ),
-      priceCents: normalizePriceCents(product?.priceCents),
-      imageUrl: product?.imageUrl ? String(product.imageUrl).trim() : null,
-      isAvailable: product?.isAvailable !== false,
-      priceAdjustmentEnabled: Boolean(product?.priceAdjustmentEnabled),
-      priceAdjustmentPercent: normalizePercent(product?.priceAdjustmentPercent),
-    }))
+    .map((product: any) => {
+      const categoryName = normalizeCategoryName(
+        product?.categoryName ||
+          product?.category ||
+          product?.menuCategory ||
+          product?.categoryLabel,
+      );
+
+      return {
+        name: String(product?.name || "").trim(),
+        description: product?.description
+          ? String(product.description).trim()
+          : null,
+        categoryName,
+        priceCents: normalizePriceCents(product?.priceCents),
+        imageUrl: product?.imageUrl ? String(product.imageUrl).trim() : null,
+        isAvailable: product?.isAvailable !== false,
+        priceAdjustmentEnabled: Boolean(product?.priceAdjustmentEnabled),
+        priceAdjustmentPercent: normalizePercent(
+          product?.priceAdjustmentPercent,
+        ),
+      };
+    })
     .filter((product) => product.name && product.priceCents > 0);
+}
+
+function getUniqueCategoryNames(
+  products: ReturnType<typeof normalizeProducts>,
+) {
+  const names = Array.from(
+    new Map(
+      products.map((product) => {
+        const name = normalizeCategoryName(product.categoryName);
+        return [name.toLowerCase(), name];
+      }),
+    ).values(),
+  );
+
+  if (!names.some((name) => name.toLowerCase() === "menu")) {
+    names.push("Menu");
+  }
+
+  return names;
 }
 
 export async function POST(req: Request) {
@@ -97,37 +130,34 @@ export async function POST(req: Request) {
       storeInput?.storeName || onboarding?.storeName || "",
     ).trim();
 
-    const address = String(
-      storeInput?.address || onboarding?.address || "",
-    ).trim();
-
-    const city = String(storeInput?.city || onboarding?.city || "").trim();
-    const area = String(storeInput?.area || onboarding?.area || "").trim();
-
     const description = String(
       storeInput?.description || onboarding?.description || "",
     ).trim();
 
+    const address = String(
+      storeInput?.address || onboarding?.address || "",
+    ).trim();
+
+    const area = String(storeInput?.area || onboarding?.area || "").trim();
+    const city = String(storeInput?.city || onboarding?.city || "").trim();
+
+    const postalCode = String(
+      storeInput?.postalCode || onboarding?.postalCode || "",
+    ).trim();
+
     const phone = String(storeInput?.phone || onboarding?.phone || "").trim();
 
-    const supportsCollection = Boolean(
-      storeInput?.supportsCollection ?? onboarding?.supportsCollection,
-    );
+    const inputLat = normalizeOptionalCoordinate(storeInput?.lat);
+    const inputLng = normalizeOptionalCoordinate(storeInput?.lng);
 
-    const supportsDelivery = Boolean(
-      storeInput?.supportsDelivery ?? onboarding?.supportsDelivery,
-    );
+    const onboardingLat = normalizeOptionalCoordinate((onboarding as any)?.lat);
+    const onboardingLng = normalizeOptionalCoordinate((onboarding as any)?.lng);
+
+    let lat = inputLat ?? onboardingLat;
+    let lng = inputLng ?? onboardingLng;
 
     const avgPrepTimeMinutes = normalizePrepTime(
       storeInput?.avgPrepTimeMinutes ?? onboarding?.avgPrepTimeMinutes ?? 25,
-    );
-
-    const deliveryFeeCents = normalizePriceCents(
-      storeInput?.deliveryFeeCents ?? onboarding?.deliveryFeeCents ?? 0,
-    );
-
-    const deliveryRadiusKm = normalizeDeliveryRadius(
-      storeInput?.deliveryRadiusKm ?? onboarding?.deliveryRadiusKm ?? null,
     );
 
     const onlinePaymentsEnabled = Boolean(
@@ -151,16 +181,6 @@ export async function POST(req: Request) {
     if (!city) {
       return NextResponse.json(
         { success: false, error: "City is required." },
-        { status: 400 },
-      );
-    }
-
-    if (!supportsCollection && !supportsDelivery) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Choose at least one order option: collection or delivery.",
-        },
         { status: 400 },
       );
     }
@@ -191,150 +211,196 @@ export async function POST(req: Request) {
       );
     }
 
+    let locationVerified =
+      typeof lat === "number" &&
+      typeof lng === "number" &&
+      Number.isFinite(lat) &&
+      Number.isFinite(lng);
+
+    if (!locationVerified) {
+      const geocoded = await geocodeStoreAddress({
+        address,
+        area,
+        city,
+        postalCode,
+      });
+
+      if (geocoded) {
+        lat = geocoded.lat;
+        lng = geocoded.lng;
+        locationVerified = geocoded.precision === "EXACT_ADDRESS";
+      }
+    }
+
     const baseSlug = slugify(storeName);
     const slug = `${baseSlug}-${Date.now().toString(36)}`;
 
-    const fullAddress = [address, area, city, "South Africa"]
-      .filter(Boolean)
-      .join(", ");
+    const result = await prisma.$transaction(
+      async (tx) => {
+        const createdStore = await tx.store.create({
+          data: {
+            ownerId: user.id,
+            name: storeName,
+            slug,
+            description: description || null,
+            address,
+            area,
+            city,
+            postalCode: postalCode || null,
+            phone: phone || null,
 
-    const geocoded = await geocodeStoreAddress({
-      address,
-      area,
-      city,
-    });
+            lat,
+            lng,
+            locationVerified,
 
-    const result = await prisma.$transaction(async (tx) => {
-      const createdStore = await tx.store.create({
-        data: {
-          ownerId: user.id,
-          name: storeName,
-          slug,
-          description: description || null,
-          address,
-          city,
-          area,
-          lat: geocoded?.lat ?? null,
-          lng: geocoded?.lng ?? null,
-          locationVerified: Boolean(geocoded),
-          avgPrepTimeMinutes,
-          approvalStatus: "PENDING_REVIEW",
-          isOpen: false,
-          supportsCollection,
-          supportsDelivery,
-          deliveryFeeCents,
-          deliveryRadiusKm,
-          onlinePaymentsEnabled,
-        },
-      });
+            avgPrepTimeMinutes,
 
-      const uniqueCategoryNames = Array.from(
-        new Set(validProducts.map((product) => product.categoryName)),
-      );
+            approvalStatus: "PENDING_REVIEW",
+            isOpen: false,
 
-      for (let i = 0; i < uniqueCategoryNames.length; i++) {
-        const categoryName = uniqueCategoryNames[i];
+            supportsCollection: true,
+            supportsDelivery: false,
+            deliveryFeeCents: null,
+            deliveryRadiusKm: null,
 
-        await tx.menuCategory.upsert({
-          where: {
-            storeId_name: {
-              storeId: createdStore.id,
-              name: categoryName,
-            },
+            onlinePaymentsEnabled,
           },
-          update: {
-            sortOrder: i,
-            isActive: true,
-          },
-          create: {
+        });
+
+        const categoryNames = getUniqueCategoryNames(validProducts);
+
+        await tx.menuCategory.createMany({
+          data: categoryNames.map((categoryName, index) => ({
             storeId: createdStore.id,
             name: categoryName,
             slug: slugify(categoryName),
-            sortOrder: i,
+            sortOrder: index,
             isActive: true,
+          })),
+        });
+
+        const categories = await tx.menuCategory.findMany({
+          where: {
+            storeId: createdStore.id,
+          },
+          select: {
+            id: true,
+            name: true,
           },
         });
-      }
 
-      const categories = await tx.menuCategory.findMany({
-        where: {
+        const categoryMap = new Map(
+          categories.map((category) => [
+            category.name.toLowerCase(),
+            category.id,
+          ]),
+        );
+
+        const fallbackCategoryId = categoryMap.get("menu");
+
+        if (!fallbackCategoryId) {
+          throw new Error("Fallback menu category was not created.");
+        }
+
+        await tx.product.createMany({
+          data: validProducts.map((product) => {
+            const categoryName = normalizeCategoryName(product.categoryName);
+
+            return {
+              storeId: createdStore.id,
+              categoryId:
+                categoryMap.get(categoryName.toLowerCase()) ??
+                fallbackCategoryId,
+              name: product.name,
+              description: product.description,
+              priceCents: product.priceCents,
+              imageUrl: product.imageUrl,
+              isAvailable: product.isAvailable,
+              priceAdjustmentEnabled: product.priceAdjustmentEnabled,
+              priceAdjustmentPercent: product.priceAdjustmentPercent,
+            };
+          }),
+        });
+
+        await tx.user.update({
+          where: { id: user.id },
+          data: {
+            role: "STORE_OWNER",
+          },
+        });
+
+        const onboardingData = {
+          status: "COMPLETED",
+          storeName,
+          description: description || null,
+          address,
+          area,
+          city,
+          postalCode: postalCode || null,
+          phone: phone || null,
+
+          lat,
+          lng,
+
+          avgPrepTimeMinutes,
+          supportsCollection: true,
+          supportsDelivery: false,
+          deliveryFeeCents: null,
+          deliveryRadiusKm: null,
+          onlinePaymentsEnabled,
+
+          reviewedProductsJson: validProducts,
+          createdStoreId: createdStore.id,
+          errorMessage: null,
+        };
+
+        const completedOnboarding = onboarding
+          ? await tx.storeOnboarding.update({
+              where: { id: onboarding.id },
+              data: onboardingData,
+            })
+          : await tx.storeOnboarding.create({
+              data: {
+                ownerId: user.id,
+                ...onboardingData,
+              },
+            });
+
+        return {
           storeId: createdStore.id,
-        },
-        select: {
-          id: true,
-          name: true,
-        },
-      });
-
-      const categoryMap = new Map(
-        categories.map((category) => [
-          category.name.toLowerCase(),
-          category.id,
-        ]),
-      );
-
-      await tx.product.createMany({
-        data: validProducts.map((product) => ({
-          storeId: createdStore.id,
-          categoryId:
-            categoryMap.get(product.categoryName.toLowerCase()) ?? null,
-          name: product.name,
-          description: product.description,
-          priceCents: product.priceCents,
-          imageUrl: product.imageUrl,
-          isAvailable: product.isAvailable,
-          priceAdjustmentEnabled: product.priceAdjustmentEnabled,
-          priceAdjustmentPercent: product.priceAdjustmentPercent,
-        })),
-      });
-
-      await tx.user.update({
-        where: { id: user.id },
-        data: {
-          role: "STORE_OWNER",
-        },
-      });
-
-      const completedOnboarding = onboarding
-        ? await tx.storeOnboarding.update({
-            where: { id: onboarding.id },
-            data: {
-              status: "COMPLETED",
-              reviewedProductsJson: validProducts,
-              createdStoreId: createdStore.id,
-              errorMessage: null,
-            },
-          })
-        : await tx.storeOnboarding.create({
-            data: {
-              ownerId: user.id,
-              status: "COMPLETED",
-              storeName,
-              description: description || null,
-              address,
-              area,
-              city,
-              phone: phone || null,
-              avgPrepTimeMinutes,
-              supportsCollection,
-              supportsDelivery,
-              deliveryFeeCents,
-              deliveryRadiusKm,
-              onlinePaymentsEnabled,
-              reviewedProductsJson: validProducts,
-              createdStoreId: createdStore.id,
-            },
-          });
-
-      return {
-        storeId: createdStore.id,
-        onboardingId: completedOnboarding.id,
-      };
-    });
+          storeName: createdStore.name,
+          storeSlug: createdStore.slug,
+          onboardingId: completedOnboarding.id,
+        };
+      },
+      {
+        maxWait: 10_000,
+        timeout: 30_000,
+      },
+    );
 
     revalidateTag("stores", "max");
     revalidateTag("stores:open-collection", "max");
     revalidateTag("stores:all-collection", "max");
+    revalidateTag(`store:${result.storeSlug}`, "max");
+    revalidateTag(`store-menu:${result.storeSlug}`, "max");
+
+    // Keep email outside the transaction.
+    // If email fails, store onboarding still succeeds.
+    if (user.email) {
+      try {
+        await sendStoreOnboardingSuccessEmail({
+          to: user.email,
+          ownerName: user.name,
+          storeName: result.storeName,
+          storeSlug: result.storeSlug,
+        });
+      } catch (emailError) {
+        if (process.env.NODE_ENV === "development") {
+          console.error("Store onboarding email failed:", emailError);
+        }
+      }
+    }
 
     return NextResponse.json({
       success: true,

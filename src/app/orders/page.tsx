@@ -84,27 +84,23 @@ function humanizeStatus(status: string) {
 
 function StatusPill({ status }: { status: string }) {
   const mapping: Record<string, string> = {
-    PENDING: "bg-yellow-50 text-yellow-700 ring-1 ring-yellow-100 dark:bg-yellow-950/40 dark:text-yellow-300 dark:ring-yellow-900/60",
-    ACCEPTED:
-      "bg-blue-50 text-blue-700 ring-1 ring-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:ring-blue-900/60",
-    IN_PREPARATION:
-      "bg-indigo-50 text-indigo-700 ring-1 ring-indigo-100 dark:bg-indigo-950/40 dark:text-indigo-300 dark:ring-indigo-900/60",
-    READY_FOR_COLLECTION:
-      "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-900/60",
-    OUT_FOR_DELIVERY:
-      "bg-cyan-50 text-cyan-700 ring-1 ring-cyan-100 dark:bg-cyan-950/40 dark:text-cyan-300 dark:ring-cyan-900/60",
-    COMPLETED:
-      "bg-slate-100 text-slate-700 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700",
-    CANCELLED:
-      "bg-rose-50 text-rose-700 ring-1 ring-rose-100 dark:bg-rose-950/40 dark:text-rose-300 dark:ring-rose-900/60",
+    PENDING: "bg-golden-yellow/25 text-kasi-black ring-golden-yellow/40",
+    ACCEPTED: "bg-blue-50 text-blue-700 ring-blue-100",
+    IN_PREPARATION: "bg-street-orange/10 text-street-orange ring-street-orange/20",
+    READY_FOR_COLLECTION: "bg-kasi-green/10 text-kasi-green ring-kasi-green/20",
+    OUT_FOR_DELIVERY: "bg-cyan-50 text-cyan-700 ring-cyan-100",
+    COMPLETED: "bg-black/10 text-black/60 ring-black/10",
+    CANCELLED: "bg-red-50 text-red-600 ring-red-200",
   };
-  const cls =
-    mapping[status] ??
-    "bg-slate-100 text-slate-700 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700";
+
+  const cls = mapping[status] ?? "bg-black/10 text-black/60 ring-black/10";
 
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide ${cls}`}
+      className={[
+        "inline-flex rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wide ring-1",
+        cls,
+      ].join(" ")}
     >
       {humanizeStatus(status)}
     </span>
@@ -113,7 +109,10 @@ function StatusPill({ status }: { status: string }) {
 
 function humanizePaymentMethod(pm: string | null | undefined) {
   if (!pm) return "—";
+
   switch (pm) {
+    case "CASH_ON_COLLECTION":
+      return "Cash on collection";
     case "CASH_ON_DELIVERY":
       return "Cash on delivery";
     case "ONLINE_PAYMENT":
@@ -157,6 +156,60 @@ const ACTIVE_STATUSES: Order["status"][] = [
 ];
 
 const PAST_STATUSES: Order["status"][] = ["COMPLETED", "CANCELLED"];
+
+function EmptyOrdersCard({
+  title,
+  text,
+  showBrowseButton = false,
+}: {
+  title: string;
+  text: string;
+  showBrowseButton?: boolean;
+}) {
+  return (
+    <div className="rounded-4xl border border-dashed border-black/15 bg-white p-6 text-center shadow-sm">
+      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-kasi-black text-3xl">
+        🍟
+      </div>
+
+      <h3 className="mt-5 text-xl font-black text-kasi-black">{title}</h3>
+
+      <p className="mx-auto mt-2 max-w-md text-sm font-medium leading-6 text-black/60">
+        {text}
+      </p>
+
+      {showBrowseButton && (
+        <Link href="/" className="mt-5 inline-flex kf-btn-primary">
+          Browse stores
+        </Link>
+      )}
+    </div>
+  );
+}
+
+function OrderMiniItems({ items }: { items: Row["items"] }) {
+  return (
+    <ul className="mt-3 divide-y divide-black/10 rounded-3xl bg-kasi-cream px-4 text-sm">
+      {items.map((item) => (
+        <li key={item.id} className="flex items-center justify-between gap-4 py-3">
+          <div className="min-w-0">
+            <p className="font-black text-kasi-black">
+              {item.quantity}× {item.name}
+            </p>
+
+            <p className="mt-1 text-xs font-medium text-black/50">
+              {formatPrice(item.unitCents)} each
+            </p>
+          </div>
+
+          <p className="shrink-0 text-sm font-black text-kasi-black">
+            {formatPrice(item.totalCents)}
+          </p>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 export default async function OrdersPage() {
   const user = await getCurrentUser();
@@ -224,286 +277,324 @@ export default async function OrdersPage() {
   const active = mapped.filter((m) => ACTIVE_STATUSES.includes(m.status));
   const past = mapped.filter((m) => PAST_STATUSES.includes(m.status));
 
-  return (
-    <main className="min-h-screen bg-slate-50 px-4 py-6 dark:bg-slate-950">
-      <div className="mx-auto max-w-4xl space-y-6">
-        <header className="flex items-start justify-between gap-4">
+return (
+  <main className="min-h-screen bg-kasi-cream px-4 py-6">
+    <div className="mx-auto max-w-5xl space-y-6">
+      <header className="overflow-hidden rounded-4xl border border-black/10 bg-white shadow-sm">
+        <div className="h-2 bg-linear-to-r from-kasi-green via-street-orange to-golden-yellow" />
+
+        <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-start sm:justify-between sm:p-6">
           <div>
-            <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-50">
+            <p className="text-xs font-black uppercase tracking-wide text-street-orange">
               My orders
+            </p>
+
+            <h1 className="mt-2 text-3xl font-black tracking-tight text-kasi-black">
+              Track your kasi food orders
             </h1>
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-300">
-              Recent orders placed with your account
+
+            <p className="mt-2 max-w-2xl text-sm font-medium leading-6 text-black/60">
+              View active orders, pickup codes, order history, and collection
+              details linked to your Kasi Flavors account.
             </p>
           </div>
-          <div className="text-right text-xs">
-            <div className="text-slate-500 dark:text-slate-400">Signed in as</div>
-            <div className="font-medium text-slate-900 dark:text-slate-50">
+
+          <div className="rounded-3xl bg-kasi-cream px-4 py-3 text-left sm:text-right">
+            <p className="text-xs font-black uppercase tracking-wide text-black/45">
+              Signed in as
+            </p>
+
+            <p className="mt-1 max-w-60 truncate text-sm font-black text-kasi-black">
               {user.name ?? user.email}
-            </div>
+            </p>
           </div>
-        </header>
+        </div>
+      </header>
 
-        {/* Active */}
-        <section className="space-y-4">
-          <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-            Active orders
-          </h2>
+      <section className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-4xl border border-black/10 bg-white p-5 shadow-sm">
+          <p className="text-xs font-black uppercase tracking-wide text-street-orange">
+            Active
+          </p>
+          <p className="mt-2 text-3xl font-black text-kasi-black">
+            {active.length}
+          </p>
+        </div>
 
-          {active.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-              You don&apos;t have any active orders right now.
-              <div className="mt-3">
-                <Link
-                  href="/"
-                  className="inline-flex items-center rounded-full bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
-                >
-                  Browse stores
-                </Link>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {active.map((o) => {
-                const showCode = shouldShowCode(o);
-                const label = codeLabel(o.fulfilmentType);
-                const count = itemsCount(o.items);
+        <div className="rounded-4xl border border-black/10 bg-white p-5 shadow-sm">
+          <p className="text-xs font-black uppercase tracking-wide text-street-orange">
+            Past
+          </p>
+          <p className="mt-2 text-3xl font-black text-kasi-black">
+            {past.length}
+          </p>
+        </div>
 
-                return (
-                  <article
-                    key={o.id}
-                    className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900"
-                  >
-                    <div className="p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <div className="flex items-center gap-3">
-                            <div className="font-mono text-xs text-slate-600 dark:text-slate-400">
-                              #{o.shortId}
-                            </div>
-                            <div className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                              {o.store.name}
-                            </div>
-                            <StatusPill status={o.status} />
-                          </div>
+        <div className="rounded-4xl border border-black/10 bg-white p-5 shadow-sm">
+          <p className="text-xs font-black uppercase tracking-wide text-street-orange">
+            Total spent
+          </p>
+          <p className="mt-2 text-3xl font-black text-kasi-green">
+            {formatPrice(mapped.reduce((sum, order) => sum + order.totalCents, 0))}
+          </p>
+        </div>
+      </section>
 
-                          <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                            {formatDateTime(o.createdAt)} · {count} item(s)
-                          </div>
-                        </div>
+      {/* Active */}
+      <section className="space-y-4">
+        <div className="flex items-end justify-between gap-4">
+          <div>
+            <p className="text-xs font-black uppercase tracking-wide text-street-orange">
+              In progress
+            </p>
 
-                        <div className="flex flex-col items-end gap-1">
-                          <div className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                            {formatPrice(o.totalCents)}
-                          </div>
-                          <div className="text-xs text-slate-500 dark:text-slate-400">
-                            {o.fulfilmentType}
-                          </div>
-                          <div className="text-[11px] text-slate-400 dark:text-slate-500">
-                            {humanizePaymentMethod(o.paymentMethod as any)}
-                          </div>
-                        </div>
-                      </div>
+            <h2 className="text-2xl font-black tracking-tight text-kasi-black">
+              Active orders
+            </h2>
+          </div>
 
-                      <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
-                        <div className="text-slate-500 dark:text-slate-400">ETA:</div>
-                        <div className="font-medium text-slate-700 dark:text-slate-200">
-                          {formatTime(o.estimatedReadyAt)}
-                        </div>
+          <p className="text-sm font-bold text-black/55">
+            {active.length} active
+          </p>
+        </div>
 
-                        <div className="text-slate-400">·</div>
+        {active.length === 0 ? (
+          <EmptyOrdersCard
+            title="No active orders"
+            text="You do not have any active orders right now. Browse nearby food spots and place a collection order when you are ready."
+            showBrowseButton
+          />
+        ) : (
+          <div className="space-y-4">
+            {active.map((o) => {
+              const showCode = shouldShowCode(o);
+              const label = codeLabel(o.fulfilmentType);
+              const count = itemsCount(o.items);
 
-                        <div className="text-xs">
-                          <span className="text-slate-500 dark:text-slate-400">
-                            {label}
-                          </span>
-
-                          {showCode ? (
-                            <div className="mt-1 flex flex-wrap items-center gap-2">
-                              <div className="rounded-md bg-slate-100 px-3 py-1 font-mono text-sm dark:bg-slate-800 dark:text-slate-50">
-                                {o.pickupCode}
-                              </div>
-
-                              {/* Only render actions when code is visible AND trackingToken exists */}
-                              {o.trackingToken ? (
-                                <OrderActionsClient
-                                  trackingToken={o.trackingToken}
-                                  pickupCode={o.pickupCode ?? ""}
-                                  storeSlug={o.store.slug}
-                                />
-                              ) : null}
-                            </div>
-                          ) : (
-                            <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-300">
-                              Code will appear when the store marks your order{" "}
-                              {o.fulfilmentType === "COLLECTION"
-                                ? "Ready for collection"
-                                : "Out for delivery"}
-                              .
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* details */}
-                      <details className="mt-3">
-                        <summary className="cursor-pointer text-xs text-slate-600 dark:text-slate-300">
-                          View items &amp; details
-                        </summary>
-
-                        <div className="mt-2 space-y-2 text-sm">
-                          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-                            {o.items.map((it) => (
-                              <li
-                                key={it.id}
-                                className="flex items-center justify-between py-2"
-                              >
-                                <div>
-                                  <div className="font-medium text-slate-900 dark:text-slate-50">
-                                    {it.quantity}× {it.name}
-                                  </div>
-                                  <div className="text-xs text-slate-500 dark:text-slate-400">
-                                    {formatPrice(it.unitCents)} each
-                                  </div>
-                                </div>
-                                <div className="font-semibold text-slate-900 dark:text-slate-50">
-                                  {formatPrice(it.totalCents)}
-                                </div>
-                              </li>
-                            ))}
-                          </ul>
-
-                          {o.note && o.note.trim() !== "" && (
-                            <div className="rounded-md border border-slate-100 bg-slate-50 p-2 text-xs dark:border-slate-700 dark:bg-slate-900">
-                              <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                                Note to store
-                              </div>
-                              <div className="mt-1 text-sm text-slate-800 dark:text-slate-50">
-                                {o.note}
-                              </div>
-                            </div>
-                          )}
-
-                          <div className="rounded-md border border-slate-100 bg-white p-2 text-xs dark:border-slate-800 dark:bg-slate-950/30">
-                            <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                              Order link
-                            </div>
-                            <div className="mt-1">
-                              <Link
-                                href={`/orders/${o.id}`}
-                                className="text-emerald-600 underline hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300"
-                              >
-                                Open order details →
-                              </Link>
-                            </div>
-                          </div>
-                        </div>
-                      </details>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          )}
-        </section>
-
-        {/* Past */}
-        <section className="space-y-4">
-          <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-            Past orders
-          </h2>
-
-          {past.length === 0 ? (
-            <div className="text-xs text-slate-500 dark:text-slate-300">
-              No past orders yet.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {past.map((o) => (
+              return (
                 <article
                   key={o.id}
-                  className="overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"
+                  className="overflow-hidden rounded-4xl border border-black/10 bg-white shadow-sm"
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="flex items-center gap-3">
-                        <div className="font-mono text-xs text-slate-600 dark:text-slate-400">
-                          #{o.shortId}
+                  <div className="h-1.5 bg-linear-to-r from-kasi-green via-street-orange to-golden-yellow" />
+
+                  <div className="p-5">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="rounded-full bg-kasi-black px-3 py-1 font-mono text-[11px] font-black uppercase tracking-wide text-white">
+                            #{o.shortId}
+                          </span>
+
+                          <StatusPill status={o.status} />
+
+                          <span className="rounded-full bg-kasi-cream px-3 py-1 text-[11px] font-black uppercase tracking-wide text-black/50">
+                            {o.fulfilmentType === "COLLECTION"
+                              ? "Collection"
+                              : "Delivery"}
+                          </span>
                         </div>
-                        <div className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+
+                        <h3 className="mt-3 text-xl font-black text-kasi-black">
                           {o.store.name}
+                        </h3>
+
+                        <p className="mt-1 text-xs font-medium text-black/50">
+                          {formatDateTime(o.createdAt)} · {count} item
+                          {count === 1 ? "" : "s"}
+                        </p>
+                      </div>
+
+                      <div className="sm:text-right">
+                        <p className="text-2xl font-black text-kasi-green">
+                          {formatPrice(o.totalCents)}
+                        </p>
+
+                        <p className="mt-1 text-xs font-bold text-black/45">
+                          {humanizePaymentMethod(o.paymentMethod as any)}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-5 grid gap-3 lg:grid-cols-[0.8fr_1.2fr]">
+                      <div className="rounded-3xl bg-kasi-cream p-4">
+                        <p className="text-xs font-black uppercase tracking-wide text-black/45">
+                          ETA
+                        </p>
+
+                        <p className="mt-1 text-lg font-black text-kasi-black">
+                          {formatTime(o.estimatedReadyAt)}
+                        </p>
+                      </div>
+
+                      <div className="rounded-3xl bg-kasi-cream p-4">
+                        <p className="text-xs font-black uppercase tracking-wide text-black/45">
+                          {label}
+                        </p>
+
+                        {showCode ? (
+                          <div className="mt-2 flex flex-wrap items-center gap-3">
+                            <div className="rounded-2xl bg-kasi-black px-4 py-2 font-mono text-lg font-black tracking-[0.2em] text-white">
+                              {o.pickupCode}
+                            </div>
+
+                            {o.trackingToken ? (
+                              <OrderActionsClient
+                                trackingToken={o.trackingToken}
+                                pickupCode={o.pickupCode ?? ""}
+                                storeSlug={o.store.slug}
+                              />
+                            ) : null}
+                          </div>
+                        ) : (
+                          <p className="mt-1 text-xs font-medium leading-5 text-black/55">
+                            Code will appear when the store marks your order{" "}
+                            {o.fulfilmentType === "COLLECTION"
+                              ? "Ready for collection"
+                              : "Out for delivery"}
+                            .
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <details className="mt-4 rounded-3xl border border-black/10 bg-white p-4">
+                      <summary className="cursor-pointer text-sm font-black text-kasi-black">
+                        View items & details
+                      </summary>
+
+                      <OrderMiniItems items={o.items} />
+
+                      {o.note && o.note.trim() !== "" && (
+                        <div className="mt-3 rounded-3xl bg-kasi-cream p-4">
+                          <p className="text-xs font-black uppercase tracking-wide text-black/45">
+                            Note to store
+                          </p>
+
+                          <p className="mt-1 text-sm font-medium leading-6 text-black/65">
+                            {o.note}
+                          </p>
                         </div>
+                      )}
+
+                      <div className="mt-3">
+                        <Link
+                          href={`/orders/${o.id}`}
+                          className="inline-flex rounded-full bg-kasi-green px-4 py-2 text-xs font-black uppercase tracking-wide text-white transition hover:bg-street-orange"
+                        >
+                          Open order details →
+                        </Link>
+                      </div>
+                    </details>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* Past */}
+      <section className="space-y-4">
+        <div className="flex items-end justify-between gap-4">
+          <div>
+            <p className="text-xs font-black uppercase tracking-wide text-street-orange">
+              History
+            </p>
+
+            <h2 className="text-2xl font-black tracking-tight text-kasi-black">
+              Past orders
+            </h2>
+          </div>
+
+          <p className="text-sm font-bold text-black/55">
+            {past.length} past
+          </p>
+        </div>
+
+        {past.length === 0 ? (
+          <EmptyOrdersCard
+            title="No past orders yet"
+            text="Completed and cancelled orders will appear here after you start ordering from Kasi Flavors."
+          />
+        ) : (
+          <div className="grid gap-4">
+            {past.map((o) => {
+              const count = itemsCount(o.items);
+
+              return (
+                <article
+                  key={o.id}
+                  className="rounded-4xl border border-black/10 bg-white p-5 shadow-sm"
+                >
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full bg-kasi-black px-3 py-1 font-mono text-[11px] font-black uppercase tracking-wide text-white">
+                          #{o.shortId}
+                        </span>
+
                         <StatusPill status={o.status} />
                       </div>
 
-                      <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                        {formatDateTime(o.createdAt)} · {itemsCount(o.items)} item(s)
-                      </div>
+                      <h3 className="mt-3 text-lg font-black text-kasi-black">
+                        {o.store.name}
+                      </h3>
+
+                      <p className="mt-1 text-xs font-medium text-black/50">
+                        {formatDateTime(o.createdAt)} · {count} item
+                        {count === 1 ? "" : "s"} ·{" "}
+                        {o.fulfilmentType === "COLLECTION"
+                          ? "Collection"
+                          : "Delivery"}
+                      </p>
                     </div>
 
-                    <div className="text-right">
-                      <div className="font-semibold text-slate-900 dark:text-slate-50">
+                    <div className="sm:text-right">
+                      <p className="text-xl font-black text-kasi-black">
                         {formatPrice(o.totalCents)}
-                      </div>
-                      <div className="text-xs text-slate-500 dark:text-slate-400">
-                        {o.fulfilmentType}
-                      </div>
-                      <div className="text-[11px] text-slate-400 dark:text-slate-500">
+                      </p>
+
+                      <p className="mt-1 text-xs font-bold text-black/45">
                         {humanizePaymentMethod(o.paymentMethod as any)}
-                      </div>
+                      </p>
                     </div>
                   </div>
 
-                  <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
+                  <div className="mt-4 flex flex-wrap items-center gap-2">
                     <Link
                       href={`/orders/${o.id}`}
-                      className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                      className="inline-flex rounded-full bg-kasi-green px-4 py-2 text-xs font-black uppercase tracking-wide text-white transition hover:bg-street-orange"
                     >
                       View details
                     </Link>
 
-                    {/* If completed, showing code is fine (both delivery & collection) */}
-                    {o.status === "COMPLETED" && shouldShowCode(o) && o.pickupCode && (
-                      <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                        {codeLabel(o.fulfilmentType)}:{" "}
-                        <span className="font-mono font-semibold text-slate-800 dark:text-slate-100">
-                          {o.pickupCode}
+                    {o.status === "COMPLETED" &&
+                      shouldShowCode(o) &&
+                      o.pickupCode && (
+                        <span className="rounded-full bg-kasi-cream px-3 py-2 text-[11px] font-bold text-black/55">
+                          {codeLabel(o.fulfilmentType)}:{" "}
+                          <span className="font-mono font-black text-kasi-black">
+                            {o.pickupCode}
+                          </span>
                         </span>
-                      </span>
-                    )}
+                      )}
                   </div>
 
-                  <details className="mt-3">
-                    <summary className="cursor-pointer text-xs text-slate-600 dark:text-slate-300">
+                  <details className="mt-4 rounded-3xl border border-black/10 bg-white p-4">
+                    <summary className="cursor-pointer text-sm font-black text-kasi-black">
                       View items
                     </summary>
-                    <ul className="mt-2 divide-y divide-slate-100 text-sm dark:divide-slate-800">
-                      {o.items.map((it) => (
-                        <li
-                          key={it.id}
-                          className="flex items-center justify-between py-2"
-                        >
-                          <div>
-                            <div className="font-medium text-slate-900 dark:text-slate-50">
-                              {it.quantity}× {it.name}
-                            </div>
-                            <div className="text-xs text-slate-500 dark:text-slate-400">
-                              {formatPrice(it.unitCents)} each
-                            </div>
-                          </div>
-                          <div className="font-semibold text-slate-900 dark:text-slate-50">
-                            {formatPrice(it.totalCents)}
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
+
+                    <OrderMiniItems items={o.items} />
                   </details>
                 </article>
-              ))}
-            </div>
-          )}
-        </section>
-      </div>
-    </main>
-  );
+              );
+            })}
+          </div>
+        )}
+      </section>
+    </div>
+  </main>
+);
 }

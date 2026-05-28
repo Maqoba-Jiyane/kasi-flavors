@@ -13,27 +13,49 @@ function toFloatOrNull(value: unknown) {
   return Number.isFinite(n) ? n : null;
 }
 
-function normalizeProducts(input: unknown) {
-  if (!Array.isArray(input)) return null;
+function normalizeCategoryName(value: unknown) {
+  const category = String(value || "").trim();
+  return category || "Menu";
+}
 
-  const products = input
-    .map((product: any) => ({
-      name: String(product?.name || "").trim(),
-      description: product?.description
-        ? String(product.description).trim()
-        : null,
-      priceCents: toInt(product?.priceCents, 0),
-      imageUrl: product?.imageUrl ? String(product.imageUrl).trim() : null,
-      imagePrompt: product?.imagePrompt
-        ? String(product.imagePrompt).trim()
-        : null,
-      isAvailable: product?.isAvailable !== false,
-      priceAdjustmentEnabled: Boolean(product?.priceAdjustmentEnabled),
-      priceAdjustmentPercent: Number(product?.priceAdjustmentPercent || 0),
-    }))
+function normalizePriceCents(value: unknown) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.round(n);
+}
+
+function normalizePercent(value: unknown) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(-100, Math.min(100, n));
+}
+
+function normalizeProducts(productsInput: unknown[]) {
+  return productsInput
+    .map((product: any) => {
+      const categoryName = normalizeCategoryName(
+        product?.categoryName ||
+          product?.category ||
+          product?.menuCategory ||
+          product?.categoryLabel,
+      );
+
+      return {
+        name: String(product?.name || "").trim(),
+        description: product?.description
+          ? String(product.description).trim()
+          : null,
+        categoryName,
+        priceCents: normalizePriceCents(product?.priceCents),
+        imageUrl: product?.imageUrl ? String(product.imageUrl).trim() : null,
+        isAvailable: product?.isAvailable !== false,
+        priceAdjustmentEnabled: Boolean(product?.priceAdjustmentEnabled),
+        priceAdjustmentPercent: normalizePercent(
+          product?.priceAdjustmentPercent,
+        ),
+      };
+    })
     .filter((product) => product.name && product.priceCents > 0);
-
-  return products.length > 0 ? products : null;
 }
 
 export async function POST(req: Request) {
@@ -61,6 +83,9 @@ export async function POST(req: Request) {
       address: String(store.address || "").trim() || null,
       area: String(store.area || "").trim() || null,
       city: String(store.city || "").trim() || null,
+      lat: store.lat,
+      lng: store.lng,
+      postalCode: store.postalCode,
       phone: String(store.phone || "").trim() || null,
       avgPrepTimeMinutes: Math.max(
         5,

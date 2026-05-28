@@ -2,9 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { StoreHeader } from "@/components/StoreHeader";
 import type { Metadata } from "next";
 import { StoreMenuClient } from "./StoreMenuClient";
-import {
-  applyPriceAdjustment,
-} from "@/lib/pricing";
+import { applyPriceAdjustment } from "@/lib/pricing";
 import { getStoreMenuCached } from "@/lib/stores/getStoreMenu";
 
 type StorePageRouteParams = {
@@ -115,8 +113,30 @@ export default async function StorePage({ params }: StorePageProps) {
   }
 
   const products = await prisma.product.findMany({
-    where: { storeId: store.id, isAvailable: true },
-    orderBy: { createdAt: "asc" },
+    where: {
+      storeId: store.id,
+      isAvailable: true,
+    },
+    include: {
+      category: {
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          sortOrder: true,
+        },
+      },
+    },
+    orderBy: [
+      {
+        category: {
+          sortOrder: "asc",
+        },
+      },
+      {
+        name: "asc",
+      },
+    ],
   });
 
   const storeAny = store as any;
@@ -125,6 +145,11 @@ export default async function StorePage({ params }: StorePageProps) {
     id: product.id,
     name: product.name,
     description: product.description ?? undefined,
+
+    categoryId: product.categoryId ?? undefined,
+    categoryName: product.category?.name ?? "Menu",
+    categorySortOrder: product.category?.sortOrder ?? 999,
+
     priceCents: applyPriceAdjustment(
       product.priceCents,
       product.priceAdjustmentEnabled,

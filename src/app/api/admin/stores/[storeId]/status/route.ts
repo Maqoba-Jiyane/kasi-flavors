@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser, assertRole } from "@/lib/auth";
 import { revalidatePath, revalidateTag } from "next/cache";
 import type { StoreApprovalStatus } from "@prisma/client";
+import { sendStoreStatusEmail } from "@/lib/email/send-store-status-email";
 
 const VALID_STATUSES: StoreApprovalStatus[] = [
   "PENDING_REVIEW",
@@ -53,10 +54,29 @@ export async function POST(
       },
       select: {
         id: true,
-        slug: true,
-        approvalStatus: true,
+        slug: true,name: true,
+        approvalStatus: true,owner: {
+          select: {email: true, name: true}
+        }
       },
     });
+
+if (store.owner?.email) {
+  try {
+    await sendStoreStatusEmail({
+      to: store.owner.email,
+      ownerName: store.owner.name,
+      storeName: store.name,
+      storeSlug: store.slug,
+      status: store.approvalStatus,
+      reason,
+    });
+  } catch (emailError) {
+    if (process.env.NODE_ENV === "development") {
+      console.error("Store status email failed:", emailError);
+    }
+  }
+}
 
     revalidateTag("stores", "max");
     revalidateTag("stores:open-collection", "max");

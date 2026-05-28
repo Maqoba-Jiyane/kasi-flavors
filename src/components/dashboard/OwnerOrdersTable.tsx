@@ -222,7 +222,7 @@ export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
 
                   <div className="space-y-2">
                     {hasActions ? (
-                      <MobileStatusActions order={order} options={options} />
+                      <MobileStatusActions order={order} options={options} needsPickupCode />
                     ) : (
                       <p className="text-xs font-bold text-black/45">
                         No actions available for this order.
@@ -413,9 +413,11 @@ export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
 function MobileStatusActions({
   order,
   options,
+  needsPickupCode
 }: {
   order: OwnerOrderRow;
   options: OrderStatus[];
+  needsPickupCode: boolean;
 }) {
   const [isPending, startTransition] = useTransition();
   const [selected, setSelected] = useState<OrderStatus | "">(
@@ -464,7 +466,7 @@ function MobileStatusActions({
       <button
         type="submit"
         disabled={isPending || !safeSelected}
-        className="rounded-full bg-kasi-black px-4 py-2 text-xs font-black text-white transition hover:bg-street-orange disabled:opacity-60"
+        className={`rounded-full bg-kasi-black px-4 py-2 text-xs font-black text-white transition hover:bg-street-orange disabled:opacity-60 ${needsPickupCode ? "hidden" : ""}`}
       >
         {isPending ? "Saving..." : "Save"}
       </button>

@@ -78,42 +78,46 @@ export async function createManualOrder({
   // -------- BUILD ORDER ITEMS & TOTAL --------
   let totalCents = 0;
 
-  const orderItems = items.map((it) => {
-    const p = prodMap.get(it.productId);
-    if (!p) throw new Error(`Product ${it.productId} not found in store`);
+const orderItems = items.map((it) => {
+  const p = prodMap.get(it.productId);
+  if (!p) throw new Error(`Product ${it.productId} not found in store`);
 
-    // quantity: ensure integer, >=1 and <= MAX_QTY_PER_ITEM
-    const rawQty = Number(it.quantity);
-    const baseQty = Number.isFinite(rawQty) ? Math.floor(rawQty) : 1;
-    const qty = Math.max(1, Math.min(MAX_QTY_PER_ITEM, baseQty));
+  const rawQty = Number(it.quantity);
+  const baseQty = Number.isFinite(rawQty) ? Math.floor(rawQty) : 1;
+  const qty = Math.max(1, Math.min(MAX_QTY_PER_ITEM, baseQty));
 
-    // apply product-level adjustment first, then store
-    let unitCents = p.priceCents;
-    if ((p as any).priceAdjustmentEnabled && (p as any).priceAdjustmentPercent) {
-      unitCents = applyPriceAdjustment(
-        unitCents,
-        (p as any).priceAdjustmentEnabled,
-        (p as any).priceAdjustmentPercent,
-      );
-    }
-    if (storeAny.priceAdjustmentEnabled && storeAny.priceAdjustmentPercent) {
-      unitCents = applyPriceAdjustment(
-        unitCents,
-        storeAny.priceAdjustmentEnabled,
-        storeAny.priceAdjustmentPercent,
-      );
-    }
-    const totalItemCents = unitCents * qty;
-    totalCents += totalItemCents;
+  const baseUnitCents = p.priceCents;
 
-    return {
-      productId: p.id,
-      name: p.name,
-      quantity: qty,
+  let unitCents = baseUnitCents;
+
+  if ((p as any).priceAdjustmentEnabled && (p as any).priceAdjustmentPercent) {
+    unitCents = applyPriceAdjustment(
       unitCents,
-      totalCents: totalItemCents,
-    };
-  });
+      (p as any).priceAdjustmentEnabled,
+      (p as any).priceAdjustmentPercent,
+    );
+  }
+
+  if (storeAny.priceAdjustmentEnabled && storeAny.priceAdjustmentPercent) {
+    unitCents = applyPriceAdjustment(
+      unitCents,
+      storeAny.priceAdjustmentEnabled,
+      storeAny.priceAdjustmentPercent,
+    );
+  }
+
+  const totalItemCents = unitCents * qty;
+  totalCents += totalItemCents;
+
+  return {
+    productId: p.id,
+    name: p.name,
+    quantity: qty,
+    baseUnitCents,
+    unitCents,
+    totalCents: totalItemCents,
+  };
+});
 
   // -------- PICKUP CODE, ESTIMATE, TRACKING --------
   // Manual orders shouldn't require a customer-facing pickup code, but the
@@ -154,15 +158,20 @@ export async function createManualOrder({
       // Ensure unique idempotency key for manual orders to avoid null-unique issues
       idempotencyKey: randomUUID(),
       estimatedReadyAt,
-      items: {
-        create: orderItems.map((it) => ({
-          productId: it.productId,
-          name: it.name,
-          quantity: it.quantity,
-          unitCents: it.unitCents,
-          totalCents: it.totalCents,
-        })),
+items: {
+  create: orderItems.map((it) => ({
+    product: {
+      connect: {
+        id: it.productId,
       },
+    },
+    name: it.name,
+    quantity: it.quantity,
+    baseUnitCents: it.baseUnitCents,
+    unitCents: it.unitCents,
+    totalCents: it.totalCents,
+  })),
+},
     },
     include: { items: true, store: true },
   });

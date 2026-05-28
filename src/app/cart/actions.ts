@@ -1,4 +1,3 @@
-// app/(public)/cart/actions.ts
 "use server";
 
 import { prisma } from "@/lib/prisma";
@@ -6,37 +5,50 @@ import { revalidatePath } from "next/cache";
 import { MAX_QTY_PER_ITEM, MIN_QTY_PER_ITEM } from "@/lib/constants";
 import { getCurrentUser } from "@/lib/auth";
 
-// helper to clamp quantity
-function normalizeQuantity(raw: unknown): number {
-  const n = Number(raw);
-  const base = Number.isFinite(n) ? Math.floor(n) : MIN_QTY_PER_ITEM;
-  return Math.max(MIN_QTY_PER_ITEM, Math.min(MAX_QTY_PER_ITEM, base));
-}
-
 const MAX_ITEMS_PER_CART = 5;
+
 type AddToCartResult =
   | { success: true }
   | {
       success: false;
-      errorCode: "UNAUTHENTICATED" | "NOT_AVAILABLE" | "MAX_ITEMS_EXCEEDED";
+      errorCode:
+        | "UNAUTHENTICATED"
+        | "NOT_AVAILABLE"
+        | "MAX_ITEMS_EXCEEDED"
+        | "INVALID_PRODUCT";
       message: string;
     };
 
-// ADD TO CART (DB-backed)
+function normalizeQuantity(raw: unknown): number {
+  const n = Number(raw);
+  const base = Number.isFinite(n) ? Math.floor(n) : MIN_QTY_PER_ITEM;
+
+  return Math.max(MIN_QTY_PER_ITEM, Math.min(MAX_QTY_PER_ITEM, base));
+}
+
+function isValidObjectId(value: unknown) {
+  return typeof value === "string" && /^[a-f\d]{24}$/i.test(value);
+}
+
+function revalidateCart() {
+  revalidatePath("/cart");
+  revalidatePath("/checkout");
+}
+
 export async function addToCart(
   productId: string,
-  quantity: number
+  quantity: number,
 ): Promise<AddToCartResult> {
-  
-  if (!productId) {
+  if (!isValidObjectId(productId)) {
     return {
       success: false,
-      errorCode: "NOT_AVAILABLE",
+      errorCode: "INVALID_PRODUCT",
       message: "Invalid product.",
     };
   }
 
   const user = await getCurrentUser();
+
   if (!user) {
     return {
       success: false,
@@ -47,10 +59,26 @@ export async function addToCart(
 
   const product = await prisma.product.findUnique({
     where: { id: productId },
-    select: { id: true, storeId: true, isAvailable: true },
+    select: {
+      id: true,
+      storeId: true,
+      isAvailable: true,
+      store: {
+        select: {
+          id: true,
+          isOpen: true,
+          approvalStatus: true,
+        },
+      },
+    },
   });
 
-  if (!product || !product.isAvailable) {
+  if (
+    !product ||
+    !product.isAvailable ||
+    !product.store ||
+    product.store.approvalStatus !== "APPROVED"
+  ) {
     return {
       success: false,
       errorCode: "NOT_AVAILABLE",
@@ -66,7 +94,12 @@ export async function addToCart(
       include: {
         items: {
           include: {
-            product: { select: { storeId: true } },
+            product: {
+              select: {
+                id: true,
+                storeId: true,
+              },
+            },
           },
         },
       },
@@ -78,20 +111,32 @@ export async function addToCart(
         include: {
           items: {
             include: {
-              product: { select: { storeId: true } },
+              product: {
+                select: {
+                  id: true,
+                  storeId: true,
+                },
+              },
             },
           },
         },
       });
     }
 
-    const existingStoreId = cart.items[0]?.product.storeId ?? null;
+    const existingStoreId = cart.items[0]?.product?.storeId ?? null;
+
     if (existingStoreId && existingStoreId !== product.storeId) {
-      await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
+      await tx.cartItem.deleteMany({
+        where: { cartId: cart.id },
+      });
+
       cart.items = [];
     }
 
-    const distinctProductIds = new Set(cart.items.map((ci) => ci.productId));
+    const distinctProductIds = new Set(
+      cart.items.map((item) => item.productId),
+    );
+
     const isNewProduct = !distinctProductIds.has(product.id);
 
     if (isNewProduct && distinctProductIds.size >= MAX_ITEMS_PER_CART) {
@@ -109,7 +154,11 @@ export async function addToCart(
           productId: product.id,
         },
       },
-      update: { quantity: { increment: safeQty } },
+      update: {
+        quantity: {
+          increment: safeQty,
+        },
+      },
       create: {
         cartId: cart.id,
         productId: product.id,
@@ -120,24 +169,25 @@ export async function addToCart(
     return { success: true as const };
   });
 
-  revalidatePath("/cart");
+  revalidateCart();
+
   return result;
 }
 
-// UPDATE QUANTITY
 export async function updateCartItem(formData: FormData) {
-  const productId = formData.get("productId") as string | null;
-  const quantityStr = (formData.get("quantity") as string | "").trim();
+  const productId = String(formData.get("productId") || "").trim();
+  const quantityStr = String(formData.get("quantity") || "").trim();
 
-  if (!productId) return;
+  if (!isValidObjectId(productId)) return;
 
   const user = await getCurrentUser();
+
   if (!user) {
     throw new Error("Not authenticated");
   }
 
-  const raw = Number(quantityStr);
-  const safeQty = Math.max(0, Number.isFinite(raw) ? Math.floor(raw) : 0);
+  const rawQty = Number(quantityStr);
+  const safeQty = Number.isFinite(rawQty) ? Math.floor(rawQty) : 0;
 
   await prisma.$transaction(async (tx) => {
     const cart = await tx.cart.findFirst({
@@ -147,20 +197,20 @@ export async function updateCartItem(formData: FormData) {
 
     if (!cart) return;
 
-    if (safeQty === 0) {
-      // remove this item
+    if (safeQty <= 0) {
       await tx.cartItem.deleteMany({
         where: {
           cartId: cart.id,
           productId,
         },
       });
+
       return;
     }
 
     const clampedQty = Math.max(
       MIN_QTY_PER_ITEM,
-      Math.min(MAX_QTY_PER_ITEM, safeQty)
+      Math.min(MAX_QTY_PER_ITEM, safeQty),
     );
 
     await tx.cartItem.updateMany({
@@ -174,15 +224,16 @@ export async function updateCartItem(formData: FormData) {
     });
   });
 
-  revalidatePath("/cart");
+  revalidateCart();
 }
 
-// REMOVE ITEM
 export async function removeCartItem(formData: FormData) {
-  const productId = formData.get("productId") as string | null;
-  if (!productId) return;
+  const productId = String(formData.get("productId") || "").trim();
+
+  if (!isValidObjectId(productId)) return;
 
   const user = await getCurrentUser();
+
   if (!user) {
     throw new Error("Not authenticated");
   }
@@ -203,12 +254,12 @@ export async function removeCartItem(formData: FormData) {
     });
   });
 
-  revalidatePath("/cart");
+  revalidateCart();
 }
 
-// CLEAR CART
 export async function clearCart() {
   const user = await getCurrentUser();
+
   if (!user) {
     throw new Error("Not authenticated");
   }
@@ -224,10 +275,7 @@ export async function clearCart() {
     await tx.cartItem.deleteMany({
       where: { cartId: cart.id },
     });
-
-    // optionally delete the cart row itself
-    // await tx.cart.delete({ where: { id: cart.id } });
   });
 
-  revalidatePath("/cart");
+  revalidateCart();
 }

@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import type { OrderStatus } from "@prisma/client";
 import { enqueueOrderReadyEmail } from "@/lib/queues/emailQueue";
 import { enqueueOrderReadyWhatsApp } from "@/lib/queues/whatsappQueue";
+import { applyOrderPriceAdjustmentLedgerTx } from "@/lib/orders/order-adjustments";
 
 const ALLOWED_READY_FROM_STATUSES: OrderStatus[] = [
   "PENDING",
@@ -66,8 +67,14 @@ export async function markOrderReady(
       // });
 
       await enqueueOrderReadyEmail({
-        customerName: user.name, fulfilmentType: order.fulfilmentType, orderId: order.id, pickupCode: order.pickupCode, storeName: "Kasi Store", tenantId: order.storeId, to: user.email
-      })
+        customerName: user.name,
+        fulfilmentType: order.fulfilmentType,
+        orderId: order.id,
+        pickupCode: order.pickupCode,
+        storeName: "Kasi Store",
+        tenantId: order.storeId,
+        to: user.email,
+      });
     } catch (err) {
       console.error("Failed to send order ready email", err);
       // Do not roll back status if email fails
@@ -153,7 +160,7 @@ export async function updateOrderStatus(formData: FormData) {
       success: false,
       error: `Cannot change status from ${previousStatus} to ${nextStatus}`,
     };
-  }  
+  }
 
   // 5) Update the status
   await prisma.order.update({
@@ -163,55 +170,55 @@ export async function updateOrderStatus(formData: FormData) {
     },
   });
 
-
   // 7) Decide if we should send "order ready" email
   const becameReadyForCollection =
     nextStatus === "READY_FOR_COLLECTION" &&
     previousStatus !== "READY_FOR_COLLECTION";
 
-
   const becameOutForDelivery =
-    nextStatus === "OUT_FOR_DELIVERY" &&
-    previousStatus !== "OUT_FOR_DELIVERY";
+    nextStatus === "OUT_FOR_DELIVERY" && previousStatus !== "OUT_FOR_DELIVERY";
 
   const shouldSendReadyEmail =
-    (becameReadyForCollection || becameOutForDelivery) &&
-    !!order.customerEmail;
+    (becameReadyForCollection || becameOutForDelivery) && !!order.customerEmail;
 
   if (shouldSendReadyEmail) {
     try {
       await enqueueOrderReadyEmail({
-        customerName: user.name, fulfilmentType: order.fulfilmentType, orderId: order.id, pickupCode: order.pickupCode, storeName: order.store.name, tenantId: order.storeId, to: order.customerEmail || user.email
-      })
+        customerName: user.name,
+        fulfilmentType: order.fulfilmentType,
+        orderId: order.id,
+        pickupCode: order.pickupCode,
+        storeName: order.store.name,
+        tenantId: order.storeId,
+        to: order.customerEmail || user.email,
+      });
     } catch (err) {
       console.error("Failed to send order ready email", err);
       // don't break the status update if email fails
     }
   }
 
-const shouldSendReadyWhatsApp =
-  (becameReadyForCollection || becameOutForDelivery) &&
-  !!order.customerPhone; // or order.customerPhone / order.customer?.phone depending on your model
+  const shouldSendReadyWhatsApp =
+    (becameReadyForCollection || becameOutForDelivery) && !!order.customerPhone; // or order.customerPhone / order.customer?.phone depending on your model
 
-if (shouldSendReadyWhatsApp) {
-  try {
-    await enqueueOrderReadyWhatsApp({
-      customerName: user.name,
-      fulfilmentType: order.fulfilmentType,
-      orderId: order.id,
-      pickupCode: order.pickupCode,
-      storeName: order.store.name,
-      to: order.customerPhone!, // adjust to whatever field you store the phone on
-      status: becameOutForDelivery
-        ? "OUT_FOR_DELIVERY"
-        : "READY_FOR_COLLECTION",
-    });
-  } catch (err) {
-    console.error("Failed to send order ready WhatsApp", err);
-    // don't break the status update if WhatsApp fails
+  if (shouldSendReadyWhatsApp) {
+    try {
+      await enqueueOrderReadyWhatsApp({
+        customerName: user.name,
+        fulfilmentType: order.fulfilmentType,
+        orderId: order.id,
+        pickupCode: order.pickupCode,
+        storeName: order.store.name,
+        to: order.customerPhone!, // adjust to whatever field you store the phone on
+        status: becameOutForDelivery
+          ? "OUT_FOR_DELIVERY"
+          : "READY_FOR_COLLECTION",
+      });
+    } catch (err) {
+      console.error("Failed to send order ready WhatsApp", err);
+      // don't break the status update if WhatsApp fails
+    }
   }
-}
-
 
   // 7) Refresh the orders page on the server
   revalidatePath("/owner/store/orders");
@@ -221,7 +228,6 @@ if (shouldSendReadyWhatsApp) {
     error: `Status changed from ${previousStatus} to ${nextStatus}`,
   };
 }
-
 
 export async function confirmOrderWithCode(formData: FormData) {
   const user = await getCurrentUser();
@@ -267,14 +273,30 @@ export async function confirmOrderWithCode(formData: FormData) {
     return;
   }
 
-  await prisma.order.update({
-    where: { id: orderId },
-    data: {
-      status: "COMPLETED",
-      completedAt: new Date(),
-    },
-  });
+  await prisma.$transaction(async (tx) => {
+    const order = await tx.order.update({
+      where: { id: orderId },
+      data: {
+        status: "COMPLETED",
+        completedAt: new Date(),
+      },
+      select: {
+        id: true,
+        fulfilmentType: true,
+        paymentMethod: true,
+      },
+    });
 
+    if (
+      order.fulfilmentType === "COLLECTION" &&
+      order.paymentMethod === "CASH_ON_COLLECTION"
+    ) {
+      await applyOrderPriceAdjustmentLedgerTx({
+        tx,
+        orderId: order.id,
+      });
+    }
+  });
   revalidatePath("/owner/store/orders");
 }
 
@@ -353,13 +375,28 @@ export async function completeDelivery(formData: FormData) {
     };
   }
 
-  await prisma.order.update({
-    where: { id: orderId },
-    data: {
-      status: "COMPLETED",
-      completedAt: new Date(),
-    },
+  await prisma.$transaction(async (tx) => {
+    const order = await tx.order.update({
+      where: { id: orderId },
+      data: {
+        status: "COMPLETED",
+        completedAt: new Date(),
+      },
+      select: {
+        id: true,
+        fulfilmentType: true,
+        paymentMethod: true,
+      },
+    });
+
+    if (
+      order.fulfilmentType === "COLLECTION" &&
+      order.paymentMethod === "CASH_ON_COLLECTION"
+    ) {
+      await applyOrderPriceAdjustmentLedgerTx({
+        tx,
+        orderId: order.id,
+      });
+    }
   });
-
-
 }
