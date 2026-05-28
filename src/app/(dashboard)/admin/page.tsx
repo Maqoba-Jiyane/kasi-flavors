@@ -60,6 +60,7 @@ export default async function AdminOverviewPage({
   searchParams,
 }: AdminOverviewPageProps) {
   const user = await getCurrentUser();
+  
   assertRole(user, ["ADMIN"]);
 
   const now = new Date();

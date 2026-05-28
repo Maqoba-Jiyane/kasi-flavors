@@ -1,33 +1,13 @@
 // src/lib/queues/emailQueue.ts
 import { Client } from "@upstash/qstash";
 
-const qstash = new Client({
-  token: process.env.QSTASH_TOKEN!,
-});
-
 type EnqueueOrderConfirmationArgs = {
   tenantId: string;
   orderId: string;
   userId: string;
 };
 
-export async function enqueueOrderConfirmationEmail(
-  args: EnqueueOrderConfirmationArgs,
-) {
-  await qstash.publishJSON({
-    url: `${process.env.BASE_URL}/api/qstash/order-confirmation`,
-    body: {
-      type: "ORDER_CONFIRMATION",
-      tenantId: args.tenantId,
-      orderId: args.orderId,
-      userId: args.userId,
-      // If you really want, you can also pass email address here,
-      // but orderId+tenantId is enough to look everything up.
-    },
-  });
-}
-
-export async function enqueueOrderReadyEmail(payload: {
+type EnqueueOrderReadyEmailArgs = {
   tenantId: string;
   to: string;
   customerName: string;
@@ -35,12 +15,91 @@ export async function enqueueOrderReadyEmail(payload: {
   orderId: string;
   pickupCode: string;
   fulfilmentType: "COLLECTION" | "DELIVERY";
-}) {
-  await qstash.publishJSON({
-    url: `${process.env.BASE_URL}/api/qstash/order-ready-email`,
+};
+
+function getRequiredEnv(name: string) {
+  const value = process.env[name];
+
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${name}`);
+  }
+
+  return value;
+}
+
+function getAppUrl() {
+  const raw =
+    process.env.APP_URL ||
+    process.env.BASE_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    "http://localhost:3000";
+
+  const withScheme =
+    raw.startsWith("http://") || raw.startsWith("https://")
+      ? raw
+      : `http://${raw}`;
+
+  return withScheme.replace(/\/$/, "");
+}
+
+function getQstashClient() {
+  return new Client({
+    token: getRequiredEnv("QSTASH_TOKEN"),
+    baseUrl: process.env.QSTASH_URL || undefined,
+  });
+}
+
+function buildUrl(path: string) {
+  const appUrl = getAppUrl();
+  const cleanPath = path.startsWith("/") ? path : `/${path}`;
+
+  return `${appUrl}${cleanPath}`;
+}
+
+export async function enqueueOrderConfirmationEmail({
+  tenantId,
+  orderId,
+  userId,
+}: EnqueueOrderConfirmationArgs) {
+  const qstash = getQstashClient();
+
+  const destinationUrl = buildUrl("/api/qstash/order-confirmation");
+
+  return qstash.publishJSON({
+    url: destinationUrl,
     body: {
-      type: "order_ready",
-      ...payload,
+      type: "ORDER_CONFIRMATION",
+      tenantId,
+      orderId,
+      userId,
+    },
+  });
+}
+
+export async function enqueueOrderReadyEmail({
+  tenantId,
+  to,
+  customerName,
+  storeName,
+  orderId,
+  pickupCode,
+  fulfilmentType,
+}: EnqueueOrderReadyEmailArgs) {
+  const qstash = getQstashClient();
+
+  const destinationUrl = buildUrl("/api/qstash/order-ready-email");
+
+  return qstash.publishJSON({
+    url: destinationUrl,
+    body: {
+      type: "ORDER_READY",
+      tenantId,
+      to,
+      customerName,
+      storeName,
+      orderId,
+      pickupCode,
+      fulfilmentType,
     },
   });
 }

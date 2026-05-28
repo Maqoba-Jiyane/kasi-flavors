@@ -2,15 +2,12 @@
 import Link from "next/link";
 import { ArrowLeft, ShoppingBag, Trash2 } from "lucide-react";
 
-import {
-  getCartForUser,
-  calculateCartTotals,
-  formatPrice,
-} from "@/lib/cart";
+import { getCartForUser, calculateCartTotals, formatPrice } from "@/lib/cart";
 import { updateCartItem, removeCartItem, clearCart } from "./actions";
 import { getCurrentUserMinimal } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
+import { prisma } from "@/lib/prisma";
 
 export const metadata: Metadata = {
   title: "Your cart",
@@ -54,7 +51,24 @@ export default async function CartPage() {
   const { itemCount, subtotalCents } = calculateCartTotals(cart);
 
   const hasItems = cart.items.length > 0;
-  const route = `/checkout?storeId=${cart.storeId}`;
+
+  const storeId = cart.storeId?.trim() || null;
+  const hasValidStoreId = !!storeId && /^[a-f\d]{24}$/i.test(storeId);
+
+  const route = hasValidStoreId ? `/checkout?storeId=${storeId}` : "/";
+
+  const store = hasValidStoreId
+    ? await prisma.store.findUnique({
+        where: { id: storeId },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          isOpen: true,
+          approvalStatus: true,
+        },
+      })
+    : null;
 
   return (
     <main className="min-h-screen bg-kasi-cream px-4 py-6 sm:px-6 lg:px-8">
@@ -67,7 +81,7 @@ export default async function CartPage() {
           Back to stores
         </Link>
 
-        <header className="mt-6 overflow-hidden rounded-[2rem] bg-kasi-black text-white shadow-sm">
+        <header className="mt-6 overflow-hidden rounded-4xl bg-kasi-black text-white shadow-sm">
           <div className="relative px-5 py-8 sm:px-8">
             <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full bg-street-orange blur-3xl opacity-40" />
             <div className="absolute -bottom-16 left-10 h-48 w-48 rounded-full bg-kasi-green blur-3xl opacity-40" />
@@ -106,7 +120,7 @@ export default async function CartPage() {
         </header>
 
         {!hasItems && (
-          <section className="mt-6 rounded-[2rem] border border-dashed border-black/15 bg-white p-8 text-center shadow-sm">
+          <section className="mt-6 rounded-4xl border border-dashed border-black/15 bg-white p-8 text-center shadow-sm">
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-kasi-black text-3xl">
               🛒
             </div>
@@ -211,7 +225,7 @@ export default async function CartPage() {
             </section>
 
             {/* Summary */}
-            <aside className="h-fit rounded-[2rem] border border-black/10 bg-white p-5 shadow-sm lg:sticky lg:top-28">
+            <aside className="h-fit rounded-4xl border border-black/10 bg-white p-5 shadow-sm lg:sticky lg:top-28">
               <div className="flex items-center gap-3">
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-kasi-green text-white">
                   <ShoppingBag className="h-5 w-5" />
@@ -261,7 +275,7 @@ export default async function CartPage() {
               </Link>
 
               <Link
-                href="/"
+                href={`/stores/${store?.slug ?? ""}`}
                 className="mt-3 inline-flex w-full items-center justify-center rounded-full border-2 border-black/10 bg-white px-5 py-3 text-sm font-black text-kasi-black transition hover:border-kasi-black"
               >
                 Add more food

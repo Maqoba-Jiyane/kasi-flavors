@@ -24,7 +24,6 @@ type OwnerOrderRow = {
   customerName: string | null;
   totalCents: number;
   status: OrderStatus;
-  fulfilmentType: "COLLECTION" | "DELIVERY";
   estimatedReadyAt?: Date | null;
   note?: string | null;
   items: OwnerOrderItem[];
@@ -60,33 +59,19 @@ function humanizeStatus(status: OrderStatus) {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function allowedNextStatuses(
-  current: OrderStatus,
-  fulfilmentType: "COLLECTION" | "DELIVERY"
-): OrderStatus[] {
-  const flow: OrderStatus[] =
-    fulfilmentType === "COLLECTION"
-      ? [
-          "PENDING",
-          "ACCEPTED",
-          "IN_PREPARATION",
-          "READY_FOR_COLLECTION",
-          "COMPLETED",
-        ]
-      : [
-          "PENDING",
-          "ACCEPTED",
-          "IN_PREPARATION",
-          "READY_FOR_COLLECTION",
-          "OUT_FOR_DELIVERY",
-          "COMPLETED",
-        ];
+function allowedNextStatuses(current: OrderStatus): OrderStatus[] {
+  const flow: OrderStatus[] = [
+    "PENDING",
+    "ACCEPTED",
+    "IN_PREPARATION",
+    "READY_FOR_COLLECTION",
+    "COMPLETED",
+  ];
 
   if (current === "COMPLETED" || current === "CANCELLED") return [];
 
   const idx = flow.indexOf(current);
-  const nextLinear =
-    idx >= 0 && idx < flow.length - 1 ? [flow[idx + 1]] : [];
+  const nextLinear = idx >= 0 && idx < flow.length - 1 ? [flow[idx + 1]] : [];
 
   return [...nextLinear, "CANCELLED"];
 }
@@ -112,16 +97,14 @@ export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-[2rem] border border-black/10 bg-white p-5 shadow-sm">
+      <div className="rounded-4xl border border-black/10 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-xs font-black uppercase tracking-wide text-street-orange">
-              Order management
+              Collection order management
             </p>
 
-            <h2 className="text-2xl font-black text-kasi-black">
-              Orders list
-            </h2>
+            <h2 className="text-2xl font-black text-kasi-black">Orders list</h2>
           </div>
 
           <p className="text-xs font-black uppercase tracking-wide text-black/45">
@@ -133,7 +116,7 @@ export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
       {/* Mobile cards */}
       <div className="space-y-3 md:hidden">
         {!hasOrders && (
-          <div className="rounded-[2rem] border border-black/10 bg-white p-6 text-center shadow-sm">
+          <div className="rounded-4xl border border-black/10 bg-white p-6 text-center shadow-sm">
             <p className="text-sm font-bold text-black/55">
               No orders to show for the current filters.
             </p>
@@ -141,19 +124,9 @@ export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
         )}
 
         {orders.map((order) => {
-          const highlight =
-            order.status === "READY_FOR_COLLECTION" ||
-            order.status === "OUT_FOR_DELIVERY";
-
-          const needsPickupCode =
-            order.fulfilmentType === "COLLECTION" &&
-            order.status === "READY_FOR_COLLECTION";
-
-          const options = allowedNextStatuses(
-            order.status,
-            order.fulfilmentType
-          );
-
+          const highlight = order.status === "READY_FOR_COLLECTION";
+          const needsPickupCode = order.status === "READY_FOR_COLLECTION";
+          const options = allowedNextStatuses(order.status);
           const hasActions = options.length > 0;
 
           return (
@@ -227,9 +200,7 @@ export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
 
                   <div className="flex flex-wrap gap-2 text-xs font-black uppercase tracking-wide">
                     <span className="inline-flex rounded-full bg-black/10 px-3 py-1 text-black/60">
-                      {order.fulfilmentType === "COLLECTION"
-                        ? "Collection"
-                        : "Delivery"}
+                      Collection
                     </span>
 
                     {order.estimatedReadyAt && (
@@ -251,7 +222,7 @@ export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
 
                   <div className="space-y-2">
                     {hasActions ? (
-                      <MobileStatusActions order={order} options={options} />
+                      <MobileStatusActions order={order} options={options} needsPickupCode />
                     ) : (
                       <p className="text-xs font-bold text-black/45">
                         No actions available for this order.
@@ -290,7 +261,7 @@ export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
       </div>
 
       {/* Desktop table */}
-      <div className="hidden overflow-hidden rounded-[2rem] border border-black/10 bg-white shadow-sm md:block">
+      <div className="hidden overflow-hidden rounded-4xl border border-black/10 bg-white shadow-sm md:block">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-black/10 text-sm">
             <thead className="bg-kasi-black text-white">
@@ -308,9 +279,6 @@ export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
                   Total
                 </th>
                 <th className="px-4 py-4 text-left text-xs font-black uppercase tracking-wide text-white/70">
-                  Fulfilment
-                </th>
-                <th className="px-4 py-4 text-left text-xs font-black uppercase tracking-wide text-white/70">
                   ETA
                 </th>
                 <th className="px-4 py-4 text-left text-xs font-black uppercase tracking-wide text-white/70">
@@ -326,7 +294,7 @@ export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
               {!hasOrders && (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={7}
                     className="px-4 py-8 text-center text-sm font-bold text-black/55"
                   >
                     No orders to show for the current filters.
@@ -335,19 +303,9 @@ export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
               )}
 
               {orders.map((order) => {
-                const highlight =
-                  order.status === "READY_FOR_COLLECTION" ||
-                  order.status === "OUT_FOR_DELIVERY";
-
-                const needsPickupCode =
-                  order.fulfilmentType === "COLLECTION" &&
-                  order.status === "READY_FOR_COLLECTION";
-
-                const options = allowedNextStatuses(
-                  order.status,
-                  order.fulfilmentType
-                );
-
+                const highlight = order.status === "READY_FOR_COLLECTION";
+                const needsPickupCode = order.status === "READY_FOR_COLLECTION";
+                const options = allowedNextStatuses(order.status);
                 const hasActions = options.length > 0;
 
                 return (
@@ -389,14 +347,6 @@ export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
                     </td>
 
                     <td className="whitespace-nowrap px-4 py-4 align-middle">
-                      <span className="inline-flex rounded-full bg-black/10 px-3 py-1 text-xs font-black uppercase tracking-wide text-black/60">
-                        {order.fulfilmentType === "COLLECTION"
-                          ? "Collection"
-                          : "Delivery"}
-                      </span>
-                    </td>
-
-                    <td className="whitespace-nowrap px-4 py-4 align-middle">
                       {order.estimatedReadyAt ? (
                         <span className="text-xs font-black text-kasi-green">
                           {formatTime(order.estimatedReadyAt)}
@@ -426,7 +376,11 @@ export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
                           action={confirmOrderWithCode}
                           className="mt-2 flex items-center justify-end gap-2"
                         >
-                          <input type="hidden" name="orderId" value={order.id} />
+                          <input
+                            type="hidden"
+                            name="orderId"
+                            value={order.id}
+                          />
 
                           <input
                             name="code"
@@ -459,36 +413,35 @@ export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
 function MobileStatusActions({
   order,
   options,
+  needsPickupCode
 }: {
   order: OwnerOrderRow;
   options: OrderStatus[];
+  needsPickupCode: boolean;
 }) {
   const [isPending, startTransition] = useTransition();
-  const [selected, setSelected] = useState<OrderStatus>(
-    options[0] ?? "CANCELLED"
+  const [selected, setSelected] = useState<OrderStatus | "">(
+    options[0] ?? ""
   );
 
-  React.useEffect(() => {
-    if (options.length > 0 && !options.includes(selected)) {
-      setSelected(options[0]);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [options.join("|")]);
+  const safeSelected: OrderStatus | "" =
+    selected && options.includes(selected) ? selected : options[0] ?? "";
 
   const onSubmit = useCallback(
     (e: React.FormEvent<HTMLFormElement>) => {
       e.preventDefault();
-      if (isPending) return;
+
+      if (isPending || !safeSelected) return;
 
       const fd = new FormData();
       fd.append("orderId", order.id);
-      fd.append("status", selected);
+      fd.append("status", safeSelected);
 
       startTransition(async () => {
         await handleStatusUpdate(fd);
       });
     },
-    [isPending, order.id, selected]
+    [isPending, order.id, safeSelected]
   );
 
   return (
@@ -497,10 +450,10 @@ function MobileStatusActions({
       className="flex flex-wrap items-center justify-between gap-2"
     >
       <select
-        value={selected}
+        value={safeSelected}
         onChange={(e) => setSelected(e.target.value as OrderStatus)}
         className="min-w-0 flex-1 rounded-full border-2 border-black/10 bg-white px-3 py-2 text-xs font-semibold text-kasi-black outline-none focus:border-kasi-green focus:ring-4 focus:ring-kasi-green/10 disabled:opacity-60"
-        disabled={isPending}
+        disabled={isPending || options.length === 0}
         aria-label="Select next status"
       >
         {options.map((status) => (
@@ -512,8 +465,8 @@ function MobileStatusActions({
 
       <button
         type="submit"
-        disabled={isPending}
-        className="rounded-full bg-kasi-black px-4 py-2 text-xs font-black text-white transition hover:bg-street-orange disabled:opacity-60"
+        disabled={isPending || !safeSelected}
+        className={`rounded-full bg-kasi-black px-4 py-2 text-xs font-black text-white transition hover:bg-street-orange disabled:opacity-60 ${needsPickupCode ? "hidden" : ""}`}
       >
         {isPending ? "Saving..." : "Save"}
       </button>
@@ -529,53 +482,37 @@ function DesktopStatusActions({
   options: OrderStatus[];
 }) {
   const [isPending, startTransition] = useTransition();
-  const [selected, setSelected] = useState<OrderStatus>(
-    options[0] ?? "CANCELLED"
+  const [selected, setSelected] = useState<OrderStatus | "">(
+    options[0] ?? ""
   );
 
-  const hideControls =
-    order.fulfilmentType === "DELIVERY" && order.status === "OUT_FOR_DELIVERY";
-
-  React.useEffect(() => {
-    if (hideControls) return;
-
-    if (options.length > 0 && !options.includes(selected)) {
-      setSelected(options[0]);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [options.join("|"), hideControls]);
+  const safeSelected: OrderStatus | "" =
+    selected && options.includes(selected) ? selected : options[0] ?? "";
 
   const onSubmit = useCallback(
     (e: React.FormEvent<HTMLFormElement>) => {
       e.preventDefault();
-      if (isPending || hideControls) return;
+
+      if (isPending || !safeSelected) return;
 
       const fd = new FormData();
       fd.append("orderId", order.id);
-      fd.append("status", selected);
+      fd.append("status", safeSelected);
 
       startTransition(async () => {
         await handleStatusUpdate(fd);
       });
     },
-    [isPending, hideControls, order.id, selected]
+    [isPending, order.id, safeSelected]
   );
-
-  if (hideControls) {
-    return (
-      <span className="text-xs font-black uppercase tracking-wide text-black/40">
-        With courier
-      </span>
-    );
-  }
 
   return (
     <form onSubmit={onSubmit} className="flex items-center justify-end gap-2">
       <select
-        value={selected}
+        value={safeSelected}
         onChange={(e) => setSelected(e.target.value as OrderStatus)}
         className="rounded-full border-2 border-black/10 bg-white px-3 py-1.5 text-xs font-semibold text-kasi-black outline-none focus:border-kasi-green focus:ring-4 focus:ring-kasi-green/10 disabled:opacity-60"
-        disabled={isPending}
+        disabled={isPending || options.length === 0}
         aria-label="Select next status"
       >
         {options.map((status) => (
@@ -587,7 +524,7 @@ function DesktopStatusActions({
 
       <button
         type="submit"
-        disabled={isPending}
+        disabled={isPending || !safeSelected}
         className="rounded-full bg-kasi-black px-4 py-1.5 text-xs font-black text-white transition hover:bg-street-orange disabled:opacity-60"
       >
         {isPending ? "Saving..." : "Save"}

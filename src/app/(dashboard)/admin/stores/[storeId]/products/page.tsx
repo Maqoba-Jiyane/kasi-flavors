@@ -1,87 +1,14 @@
-// app/(dashboard)/admin/stores/[storeId]/products/page.tsx
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser, assertRole } from "@/lib/auth";
-import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
-import { formatPrice } from "../../../overview/page";
-import { applyPriceAdjustment } from "@/lib/pricing";
+import { notFound } from "next/navigation";
+import Link from "next/link";
+import { AdminProductPriceManager } from "@/components/admin/AdminProductPriceManager";
 
-interface StoreProductsPageProps {
-  params: Promise<{ storeId: string }>;
-}
-
-// Server actions (MVP, same file for now – you can extract later)
-async function toggleAvailability(formData: FormData) {
-  "use server";
-
-  const user = await getCurrentUser();
-  assertRole(user, ["ADMIN"]);
-
-  const productId = formData.get("productId") as string | null;
-  const storeId = formData.get("storeId") as string | null;
-  const current = formData.get("current") as string | null;
-
-  if (!productId || !storeId || current == null) {
-    throw new Error("Invalid form data");
-  }
-
-  const isAvailable = current === "true";
-
-  await prisma.product.update({
-    where: { id: productId },
-    data: { isAvailable: !isAvailable },
-  });
-
-  revalidatePath(`/admin/stores/${storeId}/products`);
-}
-
-async function createProduct(formData: FormData) {
-  "use server";
-
-  const user = await getCurrentUser();
-  assertRole(user, ["ADMIN"]);
-
-  const storeId = formData.get("storeId") as string | null;
-  const name = (formData.get("name") as string | "").trim();
-  const priceStr = (formData.get("price") as string | "").trim();
-  const description = (formData.get("description") as string | "").trim();
-  const adjEnabled = formData.get("priceAdjustmentEnabled") === "on";
-  const adjPercent = Number(formData.get("priceAdjustmentPercent") || 0);
-
-  if (!storeId || !name || !priceStr) {
-    throw new Error("Missing required fields");
-  }
-
-  const price = Number(priceStr);
-
-  if (Number.isNaN(price) || price <= 0) {
-    throw new Error("Invalid price");
-  }
-
-  // round to nearest 0.50
-  const roundedPrice = Math.round(price * 2) / 2;
-
-  const priceCents = Math.round(roundedPrice * 100);
-
-  await prisma.product.create({
-    data: {
-      storeId,
-      name,
-      description: description || null,
-      priceCents,
-      isAvailable: true,
-      priceAdjustmentEnabled: adjEnabled,
-      priceAdjustmentPercent: adjPercent,
-    },
-  });
-
-  revalidatePath(`/admin/stores/${storeId}/products`);
-  redirect(`/admin/stores/${storeId}/products`);
-}
-
-export default async function StoreProductsPage({
+export default async function AdminStoreProductsPage({
   params,
-}: StoreProductsPageProps) {
+}: {
+  params: Promise<{ storeId: string }>;
+}) {
   const user = await getCurrentUser();
   assertRole(user, ["ADMIN"]);
 
@@ -91,14 +18,15 @@ export default async function StoreProductsPage({
     where: { id: storeId },
     select: {
       id: true,
-      priceAdjustmentEnabled: true,
-      priceAdjustmentPercent: true,
+      name: true,
+      slug: true,
       products: {
-        orderBy: { createdAt: "desc" },
+        orderBy: {
+          createdAt: "desc",
+        },
         select: {
           id: true,
           name: true,
-          description: true,
           priceCents: true,
           isAvailable: true,
           priceAdjustmentEnabled: true,
@@ -108,279 +36,32 @@ export default async function StoreProductsPage({
     },
   });
 
-  if (!store) {
-    throw new Error("Store not found");
-  }
-
-  const products = store.products;
+  if (!store) return notFound();
 
   return (
     <main className="space-y-5">
-      {/* Add product form */}
-      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-          Add product
-        </h2>
-        <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-          Quickly add a new item to this store’s menu.
+      <header className="rounded-4xl border border-black/10 bg-white p-5 shadow-sm">
+        <Link
+          href={`/admin/stores/${store.id}`}
+          className="inline-flex rounded-full border-2 border-black/10 bg-white px-4 py-2 text-xs font-black uppercase tracking-wide text-kasi-black transition hover:border-kasi-green hover:text-kasi-green"
+        >
+          ← Back to store
+        </Link>
+
+        <p className="mt-5 text-xs font-black uppercase tracking-wide text-street-orange">
+          Product pricing
         </p>
 
-        <form action={createProduct} className="mt-3 grid gap-3 sm:grid-cols-2">
-          <input type="hidden" name="storeId" value={store.id} />
+        <h1 className="mt-2 text-3xl font-black tracking-tight text-kasi-black">
+          {store.name}
+        </h1>
 
-          <div className="space-y-1">
-            <label className="text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              Name
-            </label>
-            <input
-              name="name"
-              required
-              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-50"
-              placeholder="Classic Kota"
-            />
-          </div>
+        <p className="mt-2 text-sm font-medium leading-6 text-black/60">
+          Manage discounts and pricing adjustments for this store’s menu.
+        </p>
+      </header>
 
-          <div className="space-y-1">
-            <label className="text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              Price (R)
-            </label>
-            <input
-              name="price"
-              type="number"
-              step="0.01"
-              min="0"
-              required
-              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-50"
-              placeholder="45.00"
-            />
-          </div>
-
-          <div className="sm:col-span-2 space-y-1">
-            <label className="text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              Description (optional)
-            </label>
-            <textarea
-              name="description"
-              rows={2}
-              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-50"
-              placeholder="Describe the item, sauces, extras, etc."
-            />
-          </div>
-
-          <div className="space-y-1">
-            <label className="inline-flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              <input
-                name="priceAdjustmentEnabled"
-                type="checkbox"
-                className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-              />
-              Enable adjustment
-            </label>
-            <input
-              name="priceAdjustmentPercent"
-              type="number"
-              step="0.01"
-              placeholder="Percent (e.g. 10 or -25)"
-              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-50"
-            />
-          </div>
-
-          <div className="sm:col-span-2 flex justify-end">
-            <button
-              type="submit"
-              className="inline-flex items-center rounded-full bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700"
-            >
-              Save product
-            </button>
-          </div>
-        </form>
-      </section>
-
-      {/* Products table */}
-      <section className="max-sm:hidden overflow-hidden rounded-xl border border-slate-200 bg-white text-xs shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <table className="min-w-full divide-y divide-slate-100 dark:divide-slate-800">
-          <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500 dark:bg-slate-950/40 dark:text-slate-400">
-            <tr>
-              <th className="px-3 py-2 text-left font-medium">Product</th>
-              <th className="px-3 py-2 text-left font-medium">Description</th>
-              <th className="px-3 py-2 text-right font-medium">Price</th>
-              <th className="px-3 py-2 text-right font-medium">Adj %</th>
-              <th className="px-3 py-2 text-center font-medium">Status</th>
-              <th className="px-3 py-2 text-right font-medium">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
-            {products.length === 0 && (
-              <tr>
-                <td
-                  colSpan={6}
-                  className="px-3 py-6 text-center text-xs text-slate-500 dark:text-slate-400"
-                >
-                  No products yet. Use the form above to add one.
-                </td>
-              </tr>
-            )}
-
-            {products.map((p) => (
-              <tr key={p.id}>
-                <td className="px-3 py-2 text-slate-800 dark:text-slate-100">
-                  <a
-                    href={`/admin/stores/${store.id}/products/${p.id}`}
-                    className="font-medium text-emerald-600 hover:underline"
-                  >
-                    {p.name}
-                  </a>
-                </td>
-                <td className="px-3 py-2 text-slate-600 dark:text-slate-300">
-                  <span className="line-clamp-2">{p.description || "—"}</span>
-                </td>
-                <td className="px-3 py-2 text-right text-slate-800 dark:text-slate-100">
-                  {(() => {
-                    let price = p.priceCents;
-                    const lines: React.ReactNode[] = [];
-
-                    // show base price if adjustments exist
-                    const hasProductAdj = p.priceAdjustmentEnabled && p.priceAdjustmentPercent !== 0;
-                    const hasStoreAdj = store.priceAdjustmentEnabled && store.priceAdjustmentPercent !== 0;
-
-                    if (hasProductAdj) {
-                      const adj = applyPriceAdjustment(
-                        price,
-                        p.priceAdjustmentEnabled,
-                        p.priceAdjustmentPercent,
-                      );
-                      lines.push(
-                        <span key="prod-base" className="line-through opacity-60">
-                          {formatPrice(price)}
-                        </span>,
-                      );
-                      price = adj;
-                    }
-
-                    if (hasStoreAdj) {
-                      const adj = applyPriceAdjustment(
-                        price,
-                        store.priceAdjustmentEnabled,
-                        store.priceAdjustmentPercent,
-                      );
-                      if (!hasProductAdj) {
-                        lines.push(
-                          <span key="base" className="line-through opacity-60">
-                            {formatPrice(price)}
-                          </span>,
-                        );
-                      }
-                      price = adj;
-                    }
-
-                    lines.push(
-                      <span key="final">{formatPrice(price)}</span>
-                    );
-
-                    return <>{lines.reduce((prev, curr) => [prev, " ", curr])}</>;
-                  })()}
-                </td>
-                <td className="px-3 py-2 text-right text-slate-800 dark:text-slate-100">
-                  {p.priceAdjustmentEnabled &&
-                   p.priceAdjustmentPercent !== 0
-                    ? `${p.priceAdjustmentPercent}%`
-                    : "—"}
-                </td>
-                <td className="px-3 py-2 text-center">
-                  <span
-                    className={[
-                      "inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-                      p.isAvailable
-                        ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200"
-                        : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
-                    ].join(" ")}
-                  >
-                    {p.isAvailable ? "Available" : "Hidden"}
-                  </span>
-                </td>
-                <td className="px-3 py-2 text-right">
-                  <form action={toggleAvailability} className="inline">
-                    <input type="hidden" name="productId" value={p.id} />
-                    <input type="hidden" name="storeId" value={store.id} />
-                    <input
-                      type="hidden"
-                      name="current"
-                      value={String(p.isAvailable)}
-                    />
-                    <button
-                      type="submit"
-                      className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                    >
-                      {p.isAvailable ? "Hide" : "Show"}
-                    </button>
-                  </form>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
-
-      <section className="space-y-3 md:hidden">
-        {products.length === 0 && (
-          <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
-            <p>No products yet. Add a product using the form above.</p>
-          </div>
-        )}
-
-        {products.map((p) => (
-          <article
-            key={p.id}
-            className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900"
-          >
-            <header className="mb-1 flex items-start justify-between gap-2">
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                {p.name}
-              </h3>
-              <span
-                className={[
-                  "inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-                  p.isAvailable
-                    ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200"
-                    : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
-                ].join(" ")}
-              >
-                {p.isAvailable ? "Available" : "Hidden"}
-              </span>
-            </header>
-
-            <p className="mb-2 line-clamp-2 text-[11px] text-slate-600 dark:text-slate-300">
-              {p.description || "No description"}
-            </p>
-
-            <p className="mb-3 text-sm font-medium text-slate-900 dark:text-slate-50">
-              {formatPrice(p.priceCents)}
-            </p>
-            {p.priceAdjustmentEnabled && p.priceAdjustmentPercent !== 0 && (
-              <p className="text-xs text-slate-600 dark:text-slate-300">
-                Adj: {p.priceAdjustmentPercent}%
-              </p>
-            )}
-
-            <form action={toggleAvailability}>
-              <input type="hidden" name="productId" value={p.id} />
-              <input type="hidden" name="storeId" value={store.id} />
-              <input
-                type="hidden"
-                name="current"
-                value={String(p.isAvailable)}
-              />
-
-              <button
-                type="submit"
-                className="inline-flex h-10 w-full items-center justify-center rounded-full border border-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50 active:scale-[0.98] dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-              >
-                {p.isAvailable ? "Hide from menu" : "Show on menu"}
-              </button>
-            </form>
-          </article>
-        ))}
-      </section>
+      <AdminProductPriceManager storeId={store.id} products={store.products} />
     </main>
   );
 }

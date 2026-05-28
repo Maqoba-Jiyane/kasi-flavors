@@ -16,6 +16,34 @@ interface StoreMenuClientProps {
   products: MenuItem[];
 }
 
+type MenuCategoryGroup = {
+  id: string;
+  name: string;
+  slug: string;
+  sortOrder: number;
+  products: MenuItem[];
+};
+
+function normalizeCategory(item: MenuItem) {
+  const name = item.categoryName?.trim() || "Menu";
+  const slug =
+    item.categorySlug?.trim() ||
+    name
+      .toLowerCase()
+      .replace(/&/g, "and")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") ||
+    "menu";
+
+  return {
+    id: item.categoryId || slug,
+    name,
+    slug,
+    sortOrder:
+      typeof item.categorySortOrder === "number" ? item.categorySortOrder : 999,
+  };
+}
+
 export function StoreMenuClient({ storeSlug, products }: StoreMenuClientProps) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const router = useRouter();
@@ -37,7 +65,7 @@ export function StoreMenuClient({ storeSlug, products }: StoreMenuClientProps) {
         (item: { productId: string; quantity: number }) => ({
           productId: item.productId,
           quantity: item.quantity,
-        })
+        }),
       );
 
       setCart(cartItemsArray);
@@ -51,15 +79,62 @@ export function StoreMenuClient({ storeSlug, products }: StoreMenuClientProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleAddToCart = async (productId: string, quantity: number) => {
-    setCart((prev) => {
-      const existing = prev.find((i) => i.productId === productId);
+  const categoryGroups = useMemo<MenuCategoryGroup[]>(() => {
+    const map = new Map<string, MenuCategoryGroup>();
+
+    for (const item of products) {
+      const category = normalizeCategory(item);
+
+      const existing = map.get(category.id);
 
       if (existing) {
-        return prev.map((i) =>
-          i.productId === productId
-            ? { ...i, quantity: i.quantity + quantity }
-            : i
+        existing.products.push(item);
+      } else {
+        map.set(category.id, {
+          id: category.id,
+          name: category.name,
+          slug: category.slug,
+          sortOrder: category.sortOrder,
+          products: [item],
+        });
+      }
+    }
+
+    return Array.from(map.values())
+      .map((group) => ({
+        ...group,
+        products: group.products.sort((a, b) => a.name.localeCompare(b.name)),
+      }))
+      .sort((a, b) => {
+        if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+        return a.name.localeCompare(b.name);
+      });
+  }, [products]);
+
+const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
+
+const activeCategory = useMemo(() => {
+  if (categoryGroups.length === 0) return null;
+
+  if (!activeCategoryId) {
+    return categoryGroups[0];
+  }
+
+  return (
+    categoryGroups.find((group) => group.id === activeCategoryId) ??
+    categoryGroups[0]
+  );
+}, [categoryGroups, activeCategoryId]);
+
+  const handleAddToCart = async (productId: string, quantity: number) => {
+    setCart((prev) => {
+      const existing = prev.find((item) => item.productId === productId);
+
+      if (existing) {
+        return prev.map((item) =>
+          item.productId === productId
+            ? { ...item, quantity: item.quantity + quantity }
+            : item,
         );
       }
 
@@ -74,7 +149,7 @@ export function StoreMenuClient({ storeSlug, products }: StoreMenuClientProps) {
     let total = 0;
 
     for (const item of cart) {
-      const product = products.find((p) => p.id === item.productId);
+      const product = products.find((product) => product.id === item.productId);
       if (!product) continue;
 
       count += item.quantity;
@@ -110,10 +185,71 @@ export function StoreMenuClient({ storeSlug, products }: StoreMenuClientProps) {
           </Link>
         </div>
       ) : (
-        <div className="grid gap-4">
-          {products.map((item) => (
-            <MenuItemCard key={item.id} item={item} onAdd={handleAddToCart} />
-          ))}
+        <div className="space-y-5">
+          <div className="sticky top-0 z-20 -mx-1 overflow-x-auto bg-kasi-cream/95 px-1 py-3 backdrop-blur">
+            <div className="flex gap-2">
+              {categoryGroups.map((group) => {
+                const isActive = activeCategory?.id === group.id;
+
+                return (
+                  <button
+                    key={group.id}
+                    type="button"
+                    onClick={() => setActiveCategoryId(group.id)}
+                    className={[
+                      "shrink-0 rounded-full border-2 px-4 py-2 text-xs font-black uppercase tracking-wide transition",
+                      isActive
+                        ? "border-kasi-green bg-kasi-green text-white shadow-sm"
+                        : "border-black/10 bg-white text-kasi-black hover:border-kasi-green hover:text-kasi-green",
+                    ].join(" ")}
+                  >
+                    {group.name}
+                    <span
+                      className={[
+                        "ml-2 rounded-full px-2 py-0.5 text-[10px]",
+                        isActive
+                          ? "bg-white/20 text-white"
+                          : "bg-kasi-cream text-black/50",
+                      ].join(" ")}
+                    >
+                      {group.products.length}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {activeCategory && (
+            <section>
+              <div className="mb-3 flex items-end justify-between gap-3">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-wide text-street-orange">
+                    Menu category
+                  </p>
+
+                  <h2 className="text-2xl font-black tracking-tight text-kasi-black">
+                    {activeCategory.name}
+                  </h2>
+                </div>
+
+                <p className="text-xs font-black uppercase tracking-wide text-black/45">
+                  {activeCategory.products.length} item
+                  {activeCategory.products.length === 1 ? "" : "s"}
+                </p>
+              </div>
+
+              <div className="grid gap-4">
+                {activeCategory.products.map((item) => (
+                  <MenuItemCard
+                    key={item.id}
+                    item={item}
+                    onAdd={handleAddToCart}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
         </div>
       )}
 

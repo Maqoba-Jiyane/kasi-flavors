@@ -8,21 +8,8 @@ import type { Order, OrderItem, Prisma } from "@prisma/client";
 export const metadata: Metadata = {
   title: "Store analytics",
   description:
-    "View your store’s revenue, order volume, fulfilment performance, fees, and top products on the Kasi Flavors analytics dashboard.",
+    "View your store’s revenue, order volume, collection performance, fees, and top products on the Kasi Flavors analytics dashboard.",
   alternates: { canonical: "/owner/store/analytics" },
-  openGraph: {
-    type: "website",
-    title: "Store analytics | Kasi Flavors",
-    description:
-      "Track completed revenue, fees, net, completion rates, fulfilment performance, and top products for your store.",
-    url: "/owner/store/analytics",
-  },
-  twitter: {
-    card: "summary",
-    title: "Store analytics | Kasi Flavors",
-    description:
-      "Analyze completed revenue, fees, net, fulfilment, and product performance for your store.",
-  },
   robots: {
     index: false,
     follow: false,
@@ -35,6 +22,8 @@ type RangeOption = "7d" | "30d" | "all";
 interface StoreAnalyticsPageProps {
   searchParams: Promise<{ range?: string }>;
 }
+
+type OrderWithItems = Order & { items: OrderItem[] };
 
 function formatMoney(cents: number) {
   return `R ${(cents / 100).toFixed(2)}`;
@@ -68,81 +57,22 @@ function humanizeStatus(status: Order["status"]) {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-type OrderWithItems = Order & { items: OrderItem[] };
-
 function sumCents(
   orders: OrderWithItems[],
-  pick: (o: OrderWithItems) => number
+  pick: (order: OrderWithItems) => number,
 ) {
-  return orders.reduce((sum, o) => sum + pick(o), 0);
+  return orders.reduce((sum, order) => sum + pick(order), 0);
 }
 
 function avgMinutesFromDates(pairs: Array<{ start: Date; end: Date }>) {
   if (pairs.length === 0) return 0;
 
   const total = pairs.reduce(
-    (sum, p) => sum + minutesBetween(p.start, p.end),
-    0
+    (sum, pair) => sum + minutesBetween(pair.start, pair.end),
+    0,
   );
 
   return total / pairs.length;
-}
-
-type Bucket = {
-  label: string;
-  orders: number;
-  completed: number;
-  cancelled: number;
-  completedRevenueCents: number;
-  feesPaidCents: number;
-  feesOutstandingCents: number;
-  avgFulfilmentMins: number;
-};
-
-function buildBucket(label: string, orders: OrderWithItems[]): Bucket {
-  const completed = orders.filter((o) => o.status === "COMPLETED");
-  const cancelled = orders.filter((o) => o.status === "CANCELLED");
-
-  const completedRevenueCents = sumCents(completed, (o) => o.totalCents);
-
-  const feesPaidCents = completed.reduce((sum, o) => {
-    const fee =
-      (o as unknown as { platformFeeCents?: number | null }).platformFeeCents ??
-      0;
-    const paid =
-      (o as unknown as { platformFeePaid?: boolean | null }).platformFeePaid ??
-      false;
-
-    return sum + (paid ? fee : 0);
-  }, 0);
-
-  const feesOutstandingCents = completed.reduce((sum, o) => {
-    const fee =
-      (o as unknown as { platformFeeCents?: number | null }).platformFeeCents ??
-      0;
-    const paid =
-      (o as unknown as { platformFeePaid?: boolean | null }).platformFeePaid ??
-      false;
-
-    return sum + (!paid ? fee : 0);
-  }, 0);
-
-  const fulfilPairs = completed
-    .filter((o) => o.completedAt)
-    .map((o) => ({ start: o.createdAt, end: o.completedAt! }));
-
-  const avgFulfilmentMins = avgMinutesFromDates(fulfilPairs);
-
-  return {
-    label,
-    orders: orders.length,
-    completed: completed.length,
-    cancelled: cancelled.length,
-    completedRevenueCents,
-    feesPaidCents,
-    feesOutstandingCents,
-    avgFulfilmentMins,
-  };
 }
 
 export default async function StoreAnalyticsPage({
@@ -159,7 +89,7 @@ export default async function StoreAnalyticsPage({
   if (!store) {
     return (
       <main className="min-h-screen bg-kasi-cream px-4 py-6">
-        <div className="mx-auto max-w-3xl rounded-[2rem] border border-black/10 bg-white p-6 text-sm shadow-sm">
+        <div className="mx-auto max-w-3xl rounded-4xl border border-black/10 bg-white p-6 text-sm shadow-sm">
           <p className="text-xs font-black uppercase tracking-wide text-street-orange">
             Store setup
           </p>
@@ -209,8 +139,13 @@ export default async function StoreAnalyticsPage({
 
   const totalOrders = orders.length;
 
-  const completedOrders = orders.filter((o) => o.status === "COMPLETED");
-  const cancelledOrders = orders.filter((o) => o.status === "CANCELLED");
+  const completedOrders = orders.filter(
+    (order) => order.status === "COMPLETED",
+  );
+
+  const cancelledOrders = orders.filter(
+    (order) => order.status === "CANCELLED",
+  );
 
   const completedCount = completedOrders.length;
   const cancelledCount = cancelledOrders.length;
@@ -218,26 +153,31 @@ export default async function StoreAnalyticsPage({
   const completionRate = totalOrders > 0 ? completedCount / totalOrders : 0;
   const cancelRate = totalOrders > 0 ? cancelledCount / totalOrders : 0;
 
-  const completedRevenueCents = sumCents(completedOrders, (o) => o.totalCents);
+  const completedRevenueCents = sumCents(
+    completedOrders,
+    (order) => order.totalCents,
+  );
 
-  const feesPaidCents = completedOrders.reduce((sum, o) => {
+  const feesPaidCents = completedOrders.reduce((sum, order) => {
     const fee =
-      (o as unknown as { platformFeeCents?: number | null }).platformFeeCents ??
-      0;
+      (order as unknown as { platformFeeCents?: number | null })
+        .platformFeeCents ?? 0;
+
     const paid =
-      (o as unknown as { platformFeePaid?: boolean | null }).platformFeePaid ??
-      false;
+      (order as unknown as { platformFeePaid?: boolean | null })
+        .platformFeePaid ?? false;
 
     return sum + (paid ? fee : 0);
   }, 0);
 
-  const feesOutstandingCents = completedOrders.reduce((sum, o) => {
+  const feesOutstandingCents = completedOrders.reduce((sum, order) => {
     const fee =
-      (o as unknown as { platformFeeCents?: number | null }).platformFeeCents ??
-      0;
+      (order as unknown as { platformFeeCents?: number | null })
+        .platformFeeCents ?? 0;
+
     const paid =
-      (o as unknown as { platformFeePaid?: boolean | null }).platformFeePaid ??
-      false;
+      (order as unknown as { platformFeePaid?: boolean | null })
+        .platformFeePaid ?? false;
 
     return sum + (!paid ? fee : 0);
   }, 0);
@@ -245,14 +185,20 @@ export default async function StoreAnalyticsPage({
   const netPaidCents = completedRevenueCents - feesPaidCents;
 
   const fulfilPairs = completedOrders
-    .filter((o) => o.completedAt)
-    .map((o) => ({ start: o.createdAt, end: o.completedAt! }));
+    .filter((order) => order.completedAt)
+    .map((order) => ({
+      start: order.createdAt,
+      end: order.completedAt!,
+    }));
 
   const avgFulfilmentMins = avgMinutesFromDates(fulfilPairs);
 
   const readyPairs = orders
-    .filter((o) => o.estimatedReadyAt)
-    .map((o) => ({ start: o.createdAt, end: o.estimatedReadyAt! }));
+    .filter((order) => order.estimatedReadyAt)
+    .map((order) => ({
+      start: order.createdAt,
+      end: order.estimatedReadyAt!,
+    }));
 
   const avgReadyEtaMins = avgMinutesFromDates(readyPairs);
 
@@ -261,82 +207,82 @@ export default async function StoreAnalyticsPage({
     "ACCEPTED",
     "IN_PREPARATION",
     "READY_FOR_COLLECTION",
-    "OUT_FOR_DELIVERY",
   ];
 
-  const activeNow = orders.filter((o) => ACTIVE_PIPELINE.includes(o.status));
+  const activeNow = orders.filter((order) =>
+    ACTIVE_PIPELINE.includes(order.status),
+  );
 
   const STUCK_KITCHEN_MIN = 30;
-  const STUCK_DELIVERY_MIN = 45;
-
   const nowMs = now.getTime();
 
-  const stuckKitchen = activeNow.filter((o) => {
-    if (!["PENDING", "ACCEPTED", "IN_PREPARATION"].includes(o.status)) {
+  const stuckKitchen = activeNow.filter((order) => {
+    if (!["PENDING", "ACCEPTED", "IN_PREPARATION"].includes(order.status)) {
       return false;
     }
 
-    const ageMin = (nowMs - o.createdAt.getTime()) / 60000;
+    const ageMin = (nowMs - order.createdAt.getTime()) / 60000;
     return ageMin >= STUCK_KITCHEN_MIN;
   });
 
-  const stuckDelivery = activeNow.filter((o) => {
-    if (o.status !== "OUT_FOR_DELIVERY") return false;
-
-    const ageMin = (nowMs - o.createdAt.getTime()) / 60000;
-    return ageMin >= STUCK_DELIVERY_MIN;
-  });
-
-  const deliveryOrders = orders.filter((o) => o.fulfilmentType === "DELIVERY");
-  const collectionOrders = orders.filter(
-    (o) => o.fulfilmentType === "COLLECTION"
-  );
-
-  const deliveryBucket = buildBucket("Delivery", deliveryOrders);
-  const collectionBucket = buildBucket("Collection", collectionOrders);
-
-  const codOrders = orders.filter(
-    (o) => (o as any).paymentMethod === "CASH_ON_DELIVERY"
-  );
-
   const onlineOrders = orders.filter(
-    (o) => (o as any).paymentMethod === "ONLINE_PAYMENT"
+    (order) => (order as any).paymentMethod === "ONLINE_PAYMENT",
   );
 
-  const codBucket = buildBucket("Cash on delivery", codOrders);
-  const onlineBucket = buildBucket("Online payment", onlineOrders);
-
-  const codShareOrders = totalOrders > 0 ? codOrders.length / totalOrders : 0;
-
-  const codCompletedRevenueCents = sumCents(
-    codOrders.filter((o) => o.status === "COMPLETED"),
-    (o) => o.totalCents
+  const payOnCollectionOrders = orders.filter(
+    (order) =>
+      (order as any).paymentMethod === "PAY_ON_COLLECTION" ||
+      (order as any).paymentMethod === "CASH_ON_DELIVERY",
   );
 
-  const codShareRevenue =
+  const onlineCompleted = onlineOrders.filter(
+    (order) => order.status === "COMPLETED",
+  );
+
+  const payOnCollectionCompleted = payOnCollectionOrders.filter(
+    (order) => order.status === "COMPLETED",
+  );
+
+  const onlineRevenueCents = sumCents(
+    onlineCompleted,
+    (order) => order.totalCents,
+  );
+
+  const payOnCollectionRevenueCents = sumCents(
+    payOnCollectionCompleted,
+    (order) => order.totalCents,
+  );
+
+  const payOnCollectionShareOrders =
+    totalOrders > 0 ? payOnCollectionOrders.length / totalOrders : 0;
+
+  const payOnCollectionShareRevenue =
     completedRevenueCents > 0
-      ? codCompletedRevenueCents / completedRevenueCents
+      ? payOnCollectionRevenueCents / completedRevenueCents
       : 0;
 
-  const statusCounts: Record<Order["status"], number> = {
-    PENDING: 0,
-    ACCEPTED: 0,
-    IN_PREPARATION: 0,
-    READY_FOR_COLLECTION: 0,
-    OUT_FOR_DELIVERY: 0,
-    COMPLETED: 0,
-    CANCELLED: 0,
-  };
+  const statusCounts: Partial<Record<Order["status"], number>> = {};
 
-  for (const o of orders) statusCounts[o.status] += 1;
+  for (const order of orders) {
+    statusCounts[order.status] = (statusCounts[order.status] || 0) + 1;
+  }
 
-  const activeStatuses = (Object.keys(statusCounts) as Order["status"][]).filter(
-    (s) => statusCounts[s] > 0
+  const displayStatuses: Order["status"][] = [
+    "PENDING",
+    "ACCEPTED",
+    "IN_PREPARATION",
+    "READY_FOR_COLLECTION",
+    "COMPLETED",
+    "CANCELLED",
+  ];
+
+  const activeStatuses = displayStatuses.filter(
+    (status) => (statusCounts[status] || 0) > 0,
   );
 
   const maxStatusCount =
     activeStatuses.length > 0
-      ? Math.max(...activeStatuses.map((s) => statusCounts[s]))
+      ? Math.max(...activeStatuses.map((status) => statusCounts[status] || 0))
       : 0;
 
   type DayAgg = {
@@ -347,8 +293,9 @@ export default async function StoreAnalyticsPage({
 
   const dayMap = new Map<string, DayAgg>();
 
-  for (const o of orders) {
-    const key = o.createdAt.toISOString().slice(0, 10);
+  for (const order of orders) {
+    const key = order.createdAt.toISOString().slice(0, 10);
+
     const existing = dayMap.get(key) ?? {
       date: key,
       count: 0,
@@ -357,21 +304,23 @@ export default async function StoreAnalyticsPage({
 
     existing.count += 1;
 
-    if (o.status === "COMPLETED") {
-      existing.completedRevenueCents += o.totalCents;
+    if (order.status === "COMPLETED") {
+      existing.completedRevenueCents += order.totalCents;
     }
 
     dayMap.set(key, existing);
   }
 
   const daily = Array.from(dayMap.values()).sort((a, b) =>
-    a.date.localeCompare(b.date)
+    a.date.localeCompare(b.date),
   );
 
   const recentDaily = rangeParam === "7d" ? daily.slice(-7) : daily.slice(-14);
 
   const maxDailyCount =
-    recentDaily.length > 0 ? Math.max(...recentDaily.map((d) => d.count)) : 0;
+    recentDaily.length > 0
+      ? Math.max(...recentDaily.map((day) => day.count))
+      : 0;
 
   const busiest =
     recentDaily.length > 0
@@ -391,10 +340,9 @@ export default async function StoreAnalyticsPage({
 
   const productMap = new Map<string, ProductAgg>();
 
-  for (const o of orders) {
-    for (const item of o.items) {
-      const key = item.name;
-      const existing = productMap.get(key) ?? {
+  for (const order of orders) {
+    for (const item of order.items) {
+      const existing = productMap.get(item.name) ?? {
         name: item.name,
         quantity: 0,
         revenueCents: 0,
@@ -402,16 +350,16 @@ export default async function StoreAnalyticsPage({
 
       existing.quantity += item.quantity;
 
-      if (o.status === "COMPLETED") {
+      if (order.status === "COMPLETED") {
         existing.revenueCents += item.totalCents;
       }
 
-      productMap.set(key, existing);
+      productMap.set(item.name, existing);
     }
   }
 
   const topProducts = Array.from(productMap.values())
-    .filter((p) => p.revenueCents > 0)
+    .filter((product) => product.revenueCents > 0)
     .sort((a, b) => b.revenueCents - a.revenueCents)
     .slice(0, 8);
 
@@ -432,7 +380,7 @@ export default async function StoreAnalyticsPage({
     <main className="py-2">
       <div className="space-y-5">
         <header className="grid gap-4 lg:grid-cols-[1fr_auto]">
-          <div className="rounded-[2rem] border border-black/10 bg-white p-5 shadow-sm">
+          <div className="rounded-4xl border border-black/10 bg-white p-5 shadow-sm">
             <p className="text-xs font-black uppercase tracking-wide text-street-orange">
               Analytics
             </p>
@@ -447,7 +395,7 @@ export default async function StoreAnalyticsPage({
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 rounded-[2rem] border border-black/10 bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap items-center gap-2 rounded-4xl border border-black/10 bg-white p-4 shadow-sm">
             <span className="text-xs font-black uppercase tracking-wide text-black/45">
               Range:
             </span>
@@ -509,9 +457,9 @@ export default async function StoreAnalyticsPage({
 
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <SummaryCard
-            label="Active orders now"
+            label="Active collection orders"
             value={String(activeNow.length)}
-            helper="Pending / accepted / in prep / ready / out"
+            helper="Pending / accepted / in prep / ready"
           />
 
           <SummaryCard
@@ -521,25 +469,6 @@ export default async function StoreAnalyticsPage({
             tone={stuckKitchen.length > 0 ? "danger" : "default"}
           />
 
-          <SummaryCard
-            label="Stuck on delivery"
-            value={String(stuckDelivery.length)}
-            helper={`≥ ${STUCK_DELIVERY_MIN} min out for delivery`}
-            tone={stuckDelivery.length > 0 ? "danger" : "default"}
-          />
-
-          <SummaryCard
-            label="COD share"
-            value={totalOrders > 0 ? pct(codShareOrders) : "—"}
-            helper={
-              completedRevenueCents > 0
-                ? `COD revenue share: ${pct(codShareRevenue)}`
-                : "No completed revenue yet"
-            }
-          />
-        </section>
-
-        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <SummaryCard
             label="Avg fulfilment"
             value={
@@ -563,64 +492,42 @@ export default async function StoreAnalyticsPage({
                 : "No ETA data"
             }
           />
+        </section>
 
+        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <SummaryCard
-            label="Delivery / Collection"
-            value={`${deliveryOrders.length} / ${collectionOrders.length}`}
-            helper="Delivery orders / Collection orders"
+            label="Pay on collection"
+            value={totalOrders > 0 ? pct(payOnCollectionShareOrders) : "—"}
+            helper={
+              completedRevenueCents > 0
+                ? `Revenue share: ${pct(payOnCollectionShareRevenue)}`
+                : "No completed revenue yet"
+            }
           />
 
           <SummaryCard
-            label="Cancel rate"
-            value={totalOrders > 0 ? pct(cancelRate) : "—"}
-            helper={`${cancelledCount} cancelled`}
+            label="Online payments"
+            value={String(onlineOrders.length)}
+            helper={`${onlineCompleted.length} completed · ${formatMoney(
+              onlineRevenueCents,
+            )}`}
+          />
+
+          <SummaryCard
+            label="Cancelled orders"
+            value={String(cancelledCount)}
+            helper={`Cancel rate: ${totalOrders > 0 ? pct(cancelRate) : "—"}`}
             tone={cancelledCount > 0 ? "danger" : "default"}
           />
-        </section>
 
-        <section className="rounded-[2rem] border border-black/10 bg-white p-5 shadow-sm">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <p className="text-xs font-black uppercase tracking-wide text-street-orange">
-                Fulfilment performance
-              </p>
-
-              <h2 className="mt-1 text-xl font-black text-kasi-black">
-                Fulfilment split
-              </h2>
-
-              <p className="mt-1 text-xs font-medium text-black/50">
-                Compare delivery vs collection performance and completed
-                revenue.
-              </p>
-            </div>
-          </div>
-
-          <AnalyticsTable
-            columns={[
-              "Type",
-              "Orders",
-              "Completed",
-              "Completed revenue",
-              "Avg fulfilment",
-            ]}
-            rows={[deliveryBucket, collectionBucket].map((b) => {
-              const completedRate = b.orders > 0 ? b.completed / b.orders : 0;
-
-              return [
-                b.label,
-                String(b.orders),
-                `${b.completed} (${pct(completedRate)})`,
-                formatMoney(b.completedRevenueCents),
-                b.completed > 0
-                  ? `${Math.round(b.avgFulfilmentMins)} min`
-                  : "—",
-              ];
-            })}
+          <SummaryCard
+            label="Top product count"
+            value={String(topProducts.length)}
+            helper="Products with completed revenue"
           />
         </section>
 
-        <section className="rounded-[2rem] border border-black/10 bg-white p-5 shadow-sm">
+        <section className="rounded-4xl border border-black/10 bg-white p-5 shadow-sm">
           <p className="text-xs font-black uppercase tracking-wide text-street-orange">
             Payment behaviour
           </p>
@@ -630,32 +537,38 @@ export default async function StoreAnalyticsPage({
           </h2>
 
           <p className="mt-1 text-xs font-medium text-black/50">
-            Cash on delivery can increase cash handling and delivery risk. Track
-            it carefully.
+            Track how customers prefer to pay for collection orders.
           </p>
 
           <AnalyticsTable
             columns={["Method", "Orders", "Completed", "Completed revenue"]}
-            rows={[codBucket, onlineBucket].map((b) => {
-              const completedRate = b.orders > 0 ? b.completed / b.orders : 0;
-
-              return [
-                b.label,
-                String(b.orders),
-                `${b.completed} (${pct(completedRate)})`,
-                formatMoney(b.completedRevenueCents),
-              ];
-            })}
+            rows={[
+              [
+                "Pay on collection",
+                String(payOnCollectionOrders.length),
+                `${payOnCollectionCompleted.length} (${pct(
+                  payOnCollectionOrders.length > 0
+                    ? payOnCollectionCompleted.length /
+                        payOnCollectionOrders.length
+                    : 0,
+                )})`,
+                formatMoney(payOnCollectionRevenueCents),
+              ],
+              [
+                "Online payment",
+                String(onlineOrders.length),
+                `${onlineCompleted.length} (${pct(
+                  onlineOrders.length > 0
+                    ? onlineCompleted.length / onlineOrders.length
+                    : 0,
+                )})`,
+                formatMoney(onlineRevenueCents),
+              ],
+            ]}
           />
-
-          {(onlineOrders.length === 0 || codOrders.length === 0) && (
-            <p className="mt-3 rounded-2xl bg-kasi-cream p-3 text-xs font-medium text-black/60">
-              Tip: As you add more orders, this table becomes more useful.
-            </p>
-          )}
         </section>
 
-        <section className="rounded-[2rem] border border-black/10 bg-white p-5 shadow-sm">
+        <section className="rounded-4xl border border-black/10 bg-white p-5 shadow-sm">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <p className="text-xs font-black uppercase tracking-wide text-street-orange">
@@ -698,16 +611,19 @@ export default async function StoreAnalyticsPage({
             </p>
           ) : (
             <div className="mt-4 space-y-3 text-xs">
-              {recentDaily.map((d) => {
+              {recentDaily.map((day) => {
                 const widthPct =
                   maxDailyCount > 0
-                    ? Math.max(8, (d.count / maxDailyCount) * 100)
+                    ? Math.max(8, (day.count / maxDailyCount) * 100)
                     : 0;
 
                 return (
-                  <div key={d.date} className="grid gap-2 sm:grid-cols-[80px_1fr_40px] sm:items-center">
+                  <div
+                    key={day.date}
+                    className="grid gap-2 sm:grid-cols-[80px_1fr_40px] sm:items-center"
+                  >
                     <div className="font-black uppercase tracking-wide text-black/50">
-                      {niceDate(d.date)}
+                      {niceDate(day.date)}
                     </div>
 
                     <div>
@@ -721,13 +637,13 @@ export default async function StoreAnalyticsPage({
                       <div className="mt-1 text-[11px] font-medium text-black/50">
                         Completed revenue:{" "}
                         <span className="font-black text-kasi-black">
-                          {formatMoney(d.completedRevenueCents)}
+                          {formatMoney(day.completedRevenueCents)}
                         </span>
                       </div>
                     </div>
 
                     <div className="text-right font-black text-kasi-black">
-                      {d.count}
+                      {day.count}
                     </div>
                   </div>
                 );
@@ -736,7 +652,7 @@ export default async function StoreAnalyticsPage({
           )}
         </section>
 
-        <section className="rounded-[2rem] border border-black/10 bg-white p-5 shadow-sm">
+        <section className="rounded-4xl border border-black/10 bg-white p-5 shadow-sm">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <p className="text-xs font-black uppercase tracking-wide text-street-orange">
@@ -748,7 +664,7 @@ export default async function StoreAnalyticsPage({
               </h2>
 
               <p className="mt-1 text-xs font-medium text-black/50">
-                Distribution of orders by status in this range.
+                Distribution of collection orders by status in this range.
               </p>
             </div>
 
@@ -780,7 +696,7 @@ export default async function StoreAnalyticsPage({
           ) : (
             <div className="mt-4 space-y-3">
               {activeStatuses.map((status) => {
-                const count = statusCounts[status];
+                const count = statusCounts[status] || 0;
 
                 const widthPct =
                   maxStatusCount > 0
@@ -788,7 +704,10 @@ export default async function StoreAnalyticsPage({
                     : 0;
 
                 return (
-                  <div key={status} className="grid gap-2 sm:grid-cols-[180px_1fr_40px] sm:items-center">
+                  <div
+                    key={status}
+                    className="grid gap-2 sm:grid-cols-[180px_1fr_40px] sm:items-center"
+                  >
                     <div className="text-xs font-black uppercase tracking-wide text-black/55">
                       {humanizeStatus(status)}
                     </div>
@@ -810,7 +729,7 @@ export default async function StoreAnalyticsPage({
           )}
         </section>
 
-        <section className="rounded-[2rem] border border-black/10 bg-white p-5 shadow-sm">
+        <section className="rounded-4xl border border-black/10 bg-white p-5 shadow-sm">
           <p className="text-xs font-black uppercase tracking-wide text-street-orange">
             Menu performance
           </p>
@@ -830,10 +749,10 @@ export default async function StoreAnalyticsPage({
           ) : (
             <AnalyticsTable
               columns={["Product", "Qty sold", "Revenue"]}
-              rows={topProducts.map((p) => [
-                p.name,
-                String(p.quantity),
-                formatMoney(p.revenueCents),
+              rows={topProducts.map((product) => [
+                product.name,
+                String(product.quantity),
+                formatMoney(product.revenueCents),
               ])}
             />
           )}
@@ -864,7 +783,7 @@ function SummaryCard({
         : "text-kasi-black";
 
   return (
-    <div className="rounded-[2rem] border border-black/10 bg-white p-5 shadow-sm">
+    <div className="rounded-4xl border border-black/10 bg-white p-5 shadow-sm">
       <p className="text-xs font-black uppercase tracking-wide text-street-orange">
         {label}
       </p>
@@ -937,8 +856,7 @@ function AnalyticsTable({
                     key={`${rowIndex}-${cellIndex}`}
                     className={[
                       "px-4 py-3 font-bold text-black/70",
-                      cellIndex === 0 ? "text-left" : "text-right",
-                      cellIndex === 0 ? "text-kasi-black" : "",
+                      cellIndex === 0 ? "text-left text-kasi-black" : "text-right",
                     ].join(" ")}
                   >
                     {cell}

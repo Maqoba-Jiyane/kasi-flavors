@@ -1,13 +1,16 @@
 // app/page.tsx
-import { prisma } from "@/lib/prisma";
 import { StoreCard } from "@/components/StoreCard";
 import { getCurrentUserMinimal } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { distanceKm } from "@/lib/location/distance";
-import { KasiLaunchLanding } from "@/components/launch/KasiLaunchLanding";
 import { LocationSearch } from "@/components/location/LocationSearch";
+import { geocodeStoreAddress } from "@/lib/location/geocode";
+import {
+  getAllCollectionStores,
+  getOpenCollectionStores,
+} from "@/lib/stores/getCollectionStores";
 
 export const metadata: Metadata = {
   title: "Order kasi food for collection",
@@ -42,6 +45,10 @@ export const metadata: Metadata = {
 type SearchParams = {
   lat?: string;
   lng?: string;
+  address?: string;
+  area?: string;
+  city?: string;
+  postalCode?: string;
   showFar?: string;
   showClosed?: string;
 };
@@ -51,50 +58,68 @@ export default async function HomePage({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
-  const sp = await searchParams;
-
   const user = await getCurrentUserMinimal();
 
   if (user?.role === "STORE_OWNER") {
     redirect("/owner/store/overview");
   }
 
-  // Keep the real customer homepage admin-only during development.
-  // Non-admin users see the launch/onboarding landing.
-  if (user?.role !== "ADMIN") {
-    return <KasiLaunchLanding />;
+  const sp = await searchParams;
+
+  const address = String(sp.address || "").trim();
+  const area = String(sp.area || "").trim();
+  const city = String(sp.city || "").trim();
+  const postalCode = String(sp.postalCode || "").trim();
+
+  const latParam = Number(sp.lat);
+  const lngParam = Number(sp.lng);
+
+  const hasCoords = Number.isFinite(latParam) && Number.isFinite(lngParam);
+
+  let customerLat: number | null = null;
+  let customerLng: number | null = null;
+
+  if (hasCoords) {
+    customerLat = latParam;
+    customerLng = lngParam;
+  } else if (address || area || city || postalCode) {
+    const geocoded = await geocodeStoreAddress({
+      address,
+      area,
+      city: city || area || "South Africa",
+      postalCode,
+    });
+
+    if (geocoded) {
+      customerLat = geocoded.lat;
+      customerLng = geocoded.lng;
+    }
   }
 
-  const lat = Number(sp.lat);
-  const lng = Number(sp.lng);
-  const hasLocation = Number.isFinite(lat) && Number.isFinite(lng);
+  const hasLocation =
+    typeof customerLat === "number" &&
+    typeof customerLng === "number" &&
+    Number.isFinite(customerLat) &&
+    Number.isFinite(customerLng);
 
   const showFar = sp.showFar === "1";
   const showClosed = sp.showClosed === "1";
 
   const stores = hasLocation
-    ? await prisma.store.findMany({
-        where: {
-          supportsCollection: true,
-          ...(showClosed ? {} : { isOpen: true }),
-          lat: { not: null },
-          lng: { not: null },
-        },
-        orderBy: {
-          createdAt: "desc",
-        },
-      })
+    ? showClosed
+      ? await getAllCollectionStores()
+      : await getOpenCollectionStores()
     : [];
 
   const mappedStores = hasLocation
     ? stores
         .map((store) => {
           const distance = distanceKm(
-            { lat, lng },
+            { lat: customerLat!, lng: customerLng! },
             {
               lat: store.lat!,
               lng: store.lng!,
-            }
+            },
           );
 
           const collectionRadiusKm = store.collectionRadiusKm ?? 5;
@@ -151,26 +176,9 @@ export default async function HomePage({
               </div>
 
               <div className="mt-8 grid max-w-xl grid-cols-3 gap-3">
-                <div className="rounded-2xl border border-white/10 bg-white/10 p-3">
-                  <p className="text-2xl">📍</p>
-                  <p className="mt-1 text-xs font-bold text-white/70">
-                    Find nearby spots
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-white/10 bg-white/10 p-3">
-                  <p className="text-2xl">🛍️</p>
-                  <p className="mt-1 text-xs font-bold text-white/70">
-                    Order for pickup
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-white/10 bg-white/10 p-3">
-                  <p className="text-2xl">🍟</p>
-                  <p className="mt-1 text-xs font-bold text-white/70">
-                    Collect fresh food
-                  </p>
-                </div>
+                <HeroMiniCard icon="📍" text="Find nearby spots" />
+                <HeroMiniCard icon="🛍️" text="Order for pickup" />
+                <HeroMiniCard icon="🍟" text="Collect fresh food" />
               </div>
             </div>
 
@@ -237,13 +245,17 @@ export default async function HomePage({
           </h2>
 
           <p className="mt-2 text-sm font-medium leading-6 text-black/60">
-            Kasi Flavors starts with collection. Share your location so we can
-            show food spots close enough for pickup.
+            Kasi Flavors starts with collection. Share your location or enter
+            your address so we can show food spots close enough for pickup.
           </p>
 
           <LocationSearch
-            initialLat={hasLocation ? lat : null}
-            initialLng={hasLocation ? lng : null}
+            initialAddress={address}
+            initialArea={area}
+            initialCity={city}
+            initialPostalCode={postalCode}
+            initialLat={hasLocation ? customerLat : null}
+            initialLng={hasLocation ? customerLng : null}
             showFar={showFar}
             showClosed={showClosed}
           />
@@ -315,14 +327,20 @@ export default async function HomePage({
             </p>
 
             <div className="mt-5 flex flex-wrap gap-2">
-              <Link
-                href={`/?lat=${lat}&lng=${lng}&showFar=1${
+              {/* <Link
+                href={`/?lat=${customerLat}&lng=${customerLng}&address=${encodeURIComponent(
+                  address,
+                )}&area=${encodeURIComponent(
+                  area,
+                )}&city=${encodeURIComponent(
+                  city,
+                )}&postalCode=${encodeURIComponent(postalCode)}&showFar=1${
                   showClosed ? "&showClosed=1" : ""
-                }`}
+                }#stores`}
                 className="kf-btn-primary inline-flex"
               >
                 Show further stores
-              </Link>
+              </Link> */}
 
               <Link href="/" className="kf-btn-secondary inline-flex">
                 Reset location
@@ -338,6 +356,15 @@ export default async function HomePage({
         )}
       </section>
     </main>
+  );
+}
+
+function HeroMiniCard({ icon, text }: { icon: string; text: string }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/10 p-3">
+      <p className="text-2xl">{icon}</p>
+      <p className="mt-1 text-xs font-bold text-white/70">{text}</p>
+    </div>
   );
 }
 

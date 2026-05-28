@@ -3,6 +3,7 @@ import { StoreHeader } from "@/components/StoreHeader";
 import type { Metadata } from "next";
 import { StoreMenuClient } from "./StoreMenuClient";
 import { applyPriceAdjustment } from "@/lib/pricing";
+import { getStoreMenuCached } from "@/lib/stores/getStoreMenu";
 
 type StorePageRouteParams = {
   slug: string;
@@ -93,9 +94,7 @@ type StorePageProps = {
 export default async function StorePage({ params }: StorePageProps) {
   const { slug } = await params;
 
-  const store = await prisma.store.findUnique({
-    where: { slug },
-  });
+  const store = await getStoreMenuCached(slug);
 
   if (!store) {
     return (
@@ -114,43 +113,51 @@ export default async function StorePage({ params }: StorePageProps) {
   }
 
   const products = await prisma.product.findMany({
-    where: { storeId: store.id, isAvailable: true },
-    orderBy: { createdAt: "asc" },
+    where: {
+      storeId: store.id,
+      isAvailable: true,
+    },
+    include: {
+      category: {
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          sortOrder: true,
+        },
+      },
+    },
+    orderBy: [
+      {
+        category: {
+          sortOrder: "asc",
+        },
+      },
+      {
+        name: "asc",
+      },
+    ],
   });
 
   const storeAny = store as any;
 
-  const mappedProducts = products.map((p) => {
-    let price = p.priceCents;
+  const mappedProducts = products.map((product) => ({
+    id: product.id,
+    name: product.name,
+    description: product.description ?? undefined,
 
-    if ((p as any).priceAdjustmentEnabled && (p as any).priceAdjustmentPercent) {
-      price = applyPriceAdjustment(
-        price,
-        (p as any).priceAdjustmentEnabled,
-        (p as any).priceAdjustmentPercent
-      );
-    }
+    categoryId: product.categoryId ?? undefined,
+    categoryName: product.category?.name ?? "Menu",
+    categorySortOrder: product.category?.sortOrder ?? 999,
 
-    if (
-      storeAny.priceAdjustmentEnabled &&
-      storeAny.priceAdjustmentPercent !== 0
-    ) {
-      price = applyPriceAdjustment(
-        price,
-        storeAny.priceAdjustmentEnabled,
-        storeAny.priceAdjustmentPercent
-      );
-    }
-
-    return {
-      id: p.id,
-      name: p.name,
-      description: p.description ?? undefined,
-      priceCents: price,
-      imageUrl: p.imageUrl ?? undefined,
-      isAvailable: p.isAvailable,
-    };
-  });
+    priceCents: applyPriceAdjustment(
+      product.priceCents,
+      product.priceAdjustmentEnabled,
+      product.priceAdjustmentPercent,
+    ),
+    imageUrl: product.imageUrl ?? undefined,
+    isAvailable: product.isAvailable,
+  }));
 
   return (
     <main className="min-h-screen bg-kasi-cream pb-28">

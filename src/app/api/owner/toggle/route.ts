@@ -2,6 +2,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { revalidatePath, revalidateTag } from "next/cache";
 
 export async function POST(req: Request) {
   try {
@@ -13,7 +14,10 @@ export async function POST(req: Request) {
     const { storeId } = await req.json();
 
     if (!storeId) {
-      return NextResponse.json({ error: "Store ID is required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Store ID is required" },
+        { status: 400 },
+      );
     }
 
     // Verify store ownership
@@ -24,6 +28,8 @@ export async function POST(req: Request) {
         ownerId: true,
         isOpen: true,
         creditCents: true,
+        approvalStatus: true,
+        slug: true,
       },
     });
 
@@ -34,6 +40,16 @@ export async function POST(req: Request) {
 
     if (!store || store.ownerId !== user?.id) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    if (store.approvalStatus !== "APPROVED") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Your store must be approved before it can open for orders.",
+        },
+        { status: 403 },
+      );
     }
 
     // If currently closed and balance is negative, block opening
@@ -54,6 +70,14 @@ export async function POST(req: Request) {
       where: { id: store.id },
       data: { isOpen: !store.isOpen },
     });
+
+    revalidateTag("stores", "max");
+    revalidateTag("stores:open-collection", "max");
+    revalidateTag("stores:all-collection", "max");
+    revalidateTag(`store:${store.slug}`, "max");
+    revalidateTag(`store-menu:${store.slug}`, "max");
+    revalidatePath("/");
+    revalidatePath(`/stores/${store.slug}`);
 
     return NextResponse.json({ success: true, isOpen: updated.isOpen });
   } catch (err) {

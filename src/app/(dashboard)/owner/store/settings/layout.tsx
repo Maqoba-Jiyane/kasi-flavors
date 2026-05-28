@@ -9,7 +9,7 @@ export default function StoreSettingsLayout({
   return (
     <main className="py-2">
       <div className="space-y-5">
-        <header className="rounded-[2rem] border border-black/10 bg-white p-5 shadow-sm">
+        <header className="rounded-4xl border border-black/10 bg-white p-5 shadow-sm">
           <p className="text-xs font-black uppercase tracking-wide text-street-orange">
             Owner controls
           </p>
@@ -19,15 +19,14 @@ export default function StoreSettingsLayout({
           </h1>
 
           <p className="mt-2 text-sm font-medium text-black/60">
-            Manage your store information, delivery settings, pricing, and
-            couriers.
+            Manage your store information, and pricing.
           </p>
 
           <nav className="mt-5 flex flex-wrap gap-2 text-xs">
             <Tab href="/owner/store/settings">General</Tab>
-            <Tab href="/owner/store/settings/delivery">Delivery</Tab>
+            {/* <Tab href="/owner/store/settings/delivery">Delivery</Tab> */}
             <Tab href="/owner/store/settings/pricing">Pricing</Tab>
-            <Tab href="/owner/store/settings/couriers">Couriers</Tab>
+            {/* <Tab href="/owner/store/settings/couriers">Couriers</Tab> */}
           </nav>
         </header>
 

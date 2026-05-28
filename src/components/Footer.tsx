@@ -107,14 +107,6 @@ export default function Footer() {
                   Track Order
                 </Link>
               </li>
-              <li>
-                <Link
-                  href="/owner-application"
-                  className="text-sm font-semibold text-white/65 transition hover:text-kasi-green"
-                >
-                  Open a Store
-                </Link>
-              </li>
             </ul>
           </div>
 
@@ -141,7 +133,7 @@ export default function Footer() {
                   support@kasiflavors.co.za
                 </a>
               </li>
-              <li>
+              {/* <li>
                 <a
                   href="https://wa.me/27701234567"
                   target="_blank"
@@ -150,7 +142,7 @@ export default function Footer() {
                 >
                   WhatsApp us
                 </a>
-              </li>
+              </li> */}
             </ul>
           </div>
 

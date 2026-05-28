@@ -9,29 +9,17 @@ import type {
   Prisma,
   LedgerEntry,
   LedgerType,
+  OrderStatus,
 } from "@prisma/client";
 import { LiveOrdersWatcher } from "@/components/dashboard/LiveOrdersWatcher";
 import { AddManualOrderClient } from "@/components/dashboard/AddManualOrderClient";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Store orders",
+  title: "Collection orders",
   description:
-    "Manage incoming orders, track statuses, see recent transactions, and create manual orders in your Kasi Flavors store dashboard.",
+    "Manage incoming collection orders, track statuses, see recent transactions, and create manual orders in your Kasi Flavors store dashboard.",
   alternates: { canonical: "/owner/store/orders" },
-  openGraph: {
-    type: "website",
-    title: "Store orders | Kasi Flavors",
-    description:
-      "View and manage all orders, statuses, balances, and recent billing activity for your Kasi Flavors store.",
-    url: "/owner/store/orders",
-  },
-  twitter: {
-    card: "summary",
-    title: "Store orders | Kasi Flavors",
-    description:
-      "Track and manage store orders from your Kasi Flavors owner dashboard.",
-  },
   robots: {
     index: false,
     follow: false,
@@ -47,29 +35,34 @@ interface OwnerOrdersPageProps {
   searchParams?: Promise<{ sort?: string; range?: string; view?: string }>;
 }
 
-const STATUS_ORDER: Record<Order["status"], number> = {
+const STATUS_ORDER: Record<OrderStatus, number> = {
   PENDING: 1,
   ACCEPTED: 2,
   IN_PREPARATION: 3,
   READY_FOR_COLLECTION: 4,
-  OUT_FOR_DELIVERY: 5,
-  COMPLETED: 6,
-  CANCELLED: 7,
+  COMPLETED: 5,
+  CANCELLED: 6,
+
+  // Keep only if your Prisma enum still contains it.
+  // We do not use it in collection-first UI.
+  OUT_FOR_DELIVERY: 99,
 };
 
-const ACTIVE_STATUSES: Order["status"][] = [
+const ACTIVE_STATUSES: OrderStatus[] = [
   "PENDING",
   "ACCEPTED",
   "IN_PREPARATION",
   "READY_FOR_COLLECTION",
-  "OUT_FOR_DELIVERY",
 ];
 
-const COMPLETED_STATUSES: Order["status"][] = ["COMPLETED", "CANCELLED"];
+const COMPLETED_STATUSES: OrderStatus[] = ["COMPLETED", "CANCELLED"];
 
-function sortByStatusThenTime(a: Order, b: Order) {
-  const sa = STATUS_ORDER[a.status];
-  const sb = STATUS_ORDER[b.status];
+function sortByStatusThenTime(
+  a: Order & { items: OrderItem[] },
+  b: Order & { items: OrderItem[] },
+) {
+  const sa = STATUS_ORDER[a.status] ?? 99;
+  const sb = STATUS_ORDER[b.status] ?? 99;
 
   if (sa !== sb) return sa - sb;
 
@@ -138,7 +131,7 @@ export default async function OwnerOrdersPage({
   if (!store) {
     return (
       <main className="min-h-screen bg-kasi-cream px-4 py-6">
-        <div className="mx-auto max-w-3xl rounded-[2rem] border border-black/10 bg-white p-6 text-sm text-black/70 shadow-sm">
+        <div className="mx-auto max-w-3xl rounded-4xl border border-black/10 bg-white p-6 text-sm text-black/70 shadow-sm">
           <p className="text-xs font-black uppercase tracking-wide text-street-orange">
             Store setup
           </p>
@@ -149,8 +142,15 @@ export default async function OwnerOrdersPage({
 
           <p className="mt-2 text-sm font-medium leading-6 text-black/60">
             This owner account does not have a store configured yet. Please
-            contact support or complete your store setup.
+            complete your store setup.
           </p>
+
+          <Link
+            href="/become-a-partner"
+            className="mt-5 inline-flex rounded-full bg-kasi-green px-5 py-3 text-sm font-black text-white transition hover:bg-street-orange"
+          >
+            Complete store setup
+          </Link>
         </div>
       </main>
     );
@@ -186,7 +186,7 @@ export default async function OwnerOrdersPage({
 
   const where: Prisma.OrderWhereInput = {
     storeId: store.id,
-    ...(rangeStart && { createdAt: { gte: rangeStart } }),
+    ...(rangeStart ? { createdAt: { gte: rangeStart } } : {}),
   };
 
   const prismaOrderBy: Prisma.OrderOrderByWithRelationInput | undefined =
@@ -209,7 +209,7 @@ export default async function OwnerOrdersPage({
     select: { id: true, name: true, priceCents: true },
   });
 
-  const sorted: (Order & { items: OrderItem[] })[] =
+  const sorted =
     sortParam === "status"
       ? [...ordersRaw].sort(sortByStatusThenTime)
       : ordersRaw;
@@ -219,29 +219,31 @@ export default async function OwnerOrdersPage({
   let filtered = sorted;
 
   if (viewParam === "active") {
-    filtered = sorted.filter((o) => ACTIVE_STATUSES.includes(o.status));
+    filtered = sorted.filter((order) => ACTIVE_STATUSES.includes(order.status));
   }
 
   if (viewParam === "completed") {
-    filtered = sorted.filter((o) => COMPLETED_STATUSES.includes(o.status));
+    filtered = sorted.filter((order) =>
+      COMPLETED_STATUSES.includes(order.status),
+    );
   }
 
-  const mapped = filtered.map((o) => ({
-    id: o.id,
-    shortId: o.id.slice(-6),
-    createdAt: o.createdAt,
-    customerName: o.customerName,
-    totalCents: o.totalCents,
-    status: o.status,
-    fulfilmentType: o.fulfilmentType,
-    estimatedReadyAt: o.estimatedReadyAt ?? undefined,
-    note: o.note,
-    items: o.items.map((it) => ({
-      id: it.id,
-      name: it.name,
-      quantity: it.quantity,
-      unitCents: it.unitCents,
-      totalCents: it.totalCents,
+  const mapped = filtered.map((order) => ({
+    id: order.id,
+    shortId: order.id.slice(-6),
+    createdAt: order.createdAt,
+    customerName: order.customerName,
+    totalCents: order.totalCents,
+    status: order.status,
+    estimatedReadyAt: order.estimatedReadyAt ?? undefined,
+    note: order.note,
+    fulfilmentType: order.fulfilmentType,
+    items: order.items.map((item) => ({
+      id: item.id,
+      name: item.name,
+      quantity: item.quantity,
+      unitCents: item.unitCents,
+      totalCents: item.totalCents,
     })),
   }));
 
@@ -259,9 +261,9 @@ export default async function OwnerOrdersPage({
     <main className="py-2">
       <div className="space-y-5">
         <header className="grid gap-4 lg:grid-cols-[1fr_360px]">
-          <div className="rounded-[2rem] border border-black/10 bg-white p-5 shadow-sm">
+          <div className="rounded-4xl border border-black/10 bg-white p-5 shadow-sm">
             <p className="text-xs font-black uppercase tracking-wide text-street-orange">
-              Orders
+              Collection orders
             </p>
 
             <h1 className="mt-2 text-3xl font-black tracking-tight text-kasi-black">
@@ -339,7 +341,7 @@ export default async function OwnerOrdersPage({
             </div>
           </div>
 
-          <div className="rounded-[2rem] border border-black/10 bg-kasi-black p-5 text-white shadow-sm">
+          <div className="rounded-4xl border border-black/10 bg-kasi-black p-5 text-white shadow-sm">
             <p className="text-xs font-black uppercase tracking-wide text-golden-yellow">
               Store balance
             </p>
@@ -372,7 +374,7 @@ export default async function OwnerOrdersPage({
           </div>
         </header>
 
-        <section className="rounded-[2rem] border border-black/10 bg-white p-5 text-xs shadow-sm">
+        <section className="rounded-4xl border border-black/10 bg-white p-5 text-xs shadow-sm">
           <div className="flex items-center justify-between gap-2">
             <div>
               <p className="text-xs font-black uppercase tracking-wide text-street-orange">

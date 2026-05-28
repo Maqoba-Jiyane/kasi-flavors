@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { LedgerStatus, LedgerType } from "@prisma/client";
+import { applyOrderPriceAdjustmentLedgerTx } from "@/lib/orders/order-adjustments";
 
 export const runtime = "nodejs";
 
@@ -99,7 +100,11 @@ export async function POST(req: NextRequest) {
     const orderIdFromMetadata = metadata.orderId ?? null;
     const typeFromMetadata = metadata.type ?? null;
 
-    if (!checkoutIdFromPayload && !topupIdFromMetadata && !orderIdFromMetadata) {
+    if (
+      !checkoutIdFromPayload &&
+      !topupIdFromMetadata &&
+      !orderIdFromMetadata
+    ) {
       console.warn("[Yoco webhook] missing identifiers", {
         eventType,
         checkoutIdFromPayload,
@@ -109,7 +114,7 @@ export async function POST(req: NextRequest) {
       return new Response("Missing identifiers", { status: 400 });
     }
 
-// 6) Find the ledger entry or order
+    // 6) Find the ledger entry or order
     let entry = null;
     let order = null;
 
@@ -165,7 +170,10 @@ export async function POST(req: NextRequest) {
     }
 
     // 7) Idempotency: if already COMPLETED, do nothing
-    if ((entry && entry.status === LedgerStatus.COMPLETED) || (order && order.status !== "PENDING")) {
+    if (
+      (entry && entry.status === LedgerStatus.COMPLETED) ||
+      (order && order.status !== "PENDING")
+    ) {
       return new Response("OK", { status: 200 });
     }
 
@@ -174,18 +182,27 @@ export async function POST(req: NextRequest) {
       if (order) {
         // Order payment successful: mark order as paid and proceed with confirmation
         // For now, just mark as accepted (assuming payment means it's ready to be processed)
-        await prisma.order.update({
-          where: { id: order.id },
-          data: {
-            status: "ACCEPTED", // or whatever status makes sense
-          },
+        await prisma.$transaction(async (tx) => {
+          await tx.order.update({
+            where: { id: order.id },
+            data: {
+              status: "ACCEPTED",
+            },
+          });
+
+          await applyOrderPriceAdjustmentLedgerTx({
+            tx,
+            orderId: order.id,
+          });
         });
 
         // TODO: Trigger order confirmation emails/WhatsApp here
         // Since the order was already created, we can enqueue confirmations now
         try {
-          const { enqueueOrderConfirmationEmail } = await import("@/lib/queues/emailQueue");
-          const { enqueueOrderConfirmationWhatsApp } = await import("@/lib/queues/whatsappQueue");
+          const { enqueueOrderConfirmationEmail } =
+            await import("@/lib/queues/emailQueue");
+          const { enqueueOrderConfirmationWhatsApp } =
+            await import("@/lib/queues/whatsappQueue");
           const { clearCartForUser } = await import("@/lib/cart");
 
           await enqueueOrderConfirmationEmail({
@@ -204,7 +221,10 @@ export async function POST(req: NextRequest) {
             await clearCartForUser(order.customerId);
           }
         } catch (err) {
-          console.error("[Yoco webhook] Failed to enqueue confirmations or clear cart", err);
+          console.error(
+            "[Yoco webhook] Failed to enqueue confirmations or clear cart",
+            err,
+          );
         }
       } else if (entry) {
         // Topup successful: mark ledger entry as COMPLETED
@@ -242,7 +262,8 @@ export async function POST(req: NextRequest) {
               status: LedgerStatus.COMPLETED,
               balanceCents: newBalance,
               provider: "YOCO",
-              checkoutId: entry.checkoutId ?? checkoutIdFromPayload ?? undefined,
+              checkoutId:
+                entry.checkoutId ?? checkoutIdFromPayload ?? undefined,
             },
           });
         });

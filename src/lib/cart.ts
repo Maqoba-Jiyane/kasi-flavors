@@ -90,7 +90,7 @@ export async function getCartForUser(userId: string): Promise<Cart> {
   const storeId = mapped[0]?.storeId ?? null;
 
   // fetch store adjustment settings once
-  let storeAdj = { enabled: false, percent: 0 };
+  const storeAdj = { enabled: false, percent: 0 };
   if (storeId) {
     const store = await prisma.store.findUnique({
       where: { id: storeId },

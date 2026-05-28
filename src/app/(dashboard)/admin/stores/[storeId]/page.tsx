@@ -3,11 +3,19 @@
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser, assertRole } from "@/lib/auth";
 import { notFound } from "next/navigation";
-import { PriceAdjustmentSettings } from "@/components/PriceAdjustmentSettings";
-import { applyPriceAdjustment } from "@/lib/pricing";
-
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
+import AdminStoreStatusActions from "@/components/admin/AdminStoreStatusActions";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Store review",
+  description: "Review and manage a Kasi Flavors store in the admin dashboard.",
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
 
 export default async function AdminStoreDetailPage({
   params,
@@ -22,251 +30,388 @@ export default async function AdminStoreDetailPage({
   const store = await prisma.store.findUnique({
     where: { id: storeId },
     include: {
-      owner: true,
+      owner: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          role: true,
+        },
+      },
+      approvedBy: {
+        select: {
+          name: true,
+          email: true,
+        },
+      },
       products: {
         orderBy: { createdAt: "desc" },
+        take: 12,
       },
       orders: {
         orderBy: { createdAt: "desc" },
         include: {
           items: true,
         },
-        take: 15,
+        take: 10,
+      },
+      _count: {
+        select: {
+          products: true,
+          orders: true,
+        },
       },
     },
   });
 
   if (!store) return notFound();
 
-  const totalProducts = store.products.length;
-  const totalOrders = store.orders.length;
-
   const totalRevenueCents = store.orders.reduce(
-    (sum, o) => sum + o.totalCents,
-    0
+    (sum, order) => sum + order.totalCents,
+    0,
   );
 
   const completedOrders = store.orders.filter(
-    (o) => o.status === "COMPLETED"
+    (order) => order.status === "COMPLETED",
   ).length;
 
-  function formatPrice(cents: number) {
-    return `R ${(cents / 100).toFixed(2)}`;
-  }
+  const pendingWarnings = [
+    !store.locationVerified ? "Location not verified" : null,
+    store._count.products === 0 ? "No products added" : null,
+    !store.lat || !store.lng ? "Missing coordinates" : null,
+  ].filter(Boolean) as string[];
 
   return (
-    <div className="space-y-10">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900 dark:text-slate-50">
-            {store.name}
-          </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            {store.area}, {store.city}
-          </p>
-        </div>
+    <main className="space-y-5">
+      <header className="rounded-4xl border border-black/10 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <Link
+              href="/admin/stores"
+              className="inline-flex rounded-full border-2 border-black/10 bg-white px-4 py-2 text-xs font-black uppercase tracking-wide text-kasi-black transition hover:border-kasi-green hover:text-kasi-green"
+            >
+              ← Back to stores
+            </Link>
 
-        <div className="flex gap-1">
-          <Link
-            href="/admin/stores"
-            className="rounded-full bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-300"
-          >
-            Back to stores
-          </Link>
+            <p className="mt-5 text-xs font-black uppercase tracking-wide text-street-orange">
+              Store review
+            </p>
 
-          <Link
-            href={`/admin/stores/${storeId}/products`}
-            className="rounded-full bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-300"
-          >
-            Manage
-          </Link>
-        </div>
-      </div>
+            <h1 className="mt-2 text-3xl font-black tracking-tight text-kasi-black">
+              {store.name}
+            </h1>
 
-      {/* Store Overview */}
-      <section className="space-y-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-          Store Overview
-        </h2>
+            <p className="mt-2 text-sm font-medium leading-6 text-black/60">
+              {store.address}
+              {store.area ? `, ${store.area}` : ""}, {store.city}
+            </p>
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <OverviewCard label="Total Products" value={totalProducts} />
-          <OverviewCard label="Total Orders" value={totalOrders} />
-          <OverviewCard label="Completed Orders" value={completedOrders} />
-          <OverviewCard
-            label="Total Revenue"
-            value={formatPrice(totalRevenueCents)}
+            <div className="mt-4 flex flex-wrap gap-2">
+              <StoreStatusBadge status={store.approvalStatus} />
+
+              <span className="rounded-full bg-kasi-cream px-3 py-1 text-[11px] font-black uppercase tracking-wide text-black/55">
+                {store.isOpen ? "Open" : "Closed"}
+              </span>
+
+              <span className="rounded-full bg-kasi-cream px-3 py-1 text-[11px] font-black uppercase tracking-wide text-black/55">
+                Collection
+              </span>
+
+              {store.locationVerified ? (
+                <span className="rounded-full bg-kasi-green/10 px-3 py-1 text-[11px] font-black uppercase tracking-wide text-kasi-green">
+                  Location verified
+                </span>
+              ) : (
+                <span className="rounded-full bg-golden-yellow/25 px-3 py-1 text-[11px] font-black uppercase tracking-wide text-kasi-black">
+                  Location not verified
+                </span>
+              )}
+            </div>
+          </div>
+
+          <AdminStoreStatusActions
+            storeId={store.id}
+            currentStatus={store.approvalStatus}
           />
         </div>
 
-        <p className="text-xs text-slate-500 dark:text-slate-400">
-          Owned by: <strong>{store.owner.name}</strong> — {store.owner.email}
-        </p>
+        {pendingWarnings.length > 0 && (
+          <div className="mt-5 rounded-3xl border border-golden-yellow/40 bg-golden-yellow/20 p-4">
+            <p className="text-sm font-black text-kasi-black">
+              Review warnings
+            </p>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              {pendingWarnings.map((warning) => (
+                <span
+                  key={warning}
+                  className="rounded-full bg-white px-3 py-1 text-[11px] font-black uppercase tracking-wide text-kasi-black"
+                >
+                  {warning}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {store.rejectionReason && (
+          <div className="mt-5 rounded-3xl border border-red-200 bg-red-50 p-4 text-sm font-bold leading-6 text-red-600">
+            Reason / admin note: {store.rejectionReason}
+          </div>
+        )}
+      </header>
+
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <OverviewCard label="Products" value={store._count.products} />
+        <OverviewCard label="Orders" value={store._count.orders} />
+        <OverviewCard label="Recent completed" value={completedOrders} />
+        <OverviewCard label="Recent revenue" value={formatMoney(totalRevenueCents)} />
       </section>
 
-      {/* Store Settings */}
-      <PriceAdjustmentSettings
-        storeId={storeId}
-        // @ts-ignore
-        priceAdjustmentEnabled={store.priceAdjustmentEnabled}
-        // @ts-ignore
-        priceAdjustmentPercent={store.priceAdjustmentPercent}
-      />
+      <section className="grid gap-5 lg:grid-cols-[1fr_0.85fr]">
+        <div className="rounded-4xl border border-black/10 bg-white p-5 shadow-sm">
+          <p className="text-xs font-black uppercase tracking-wide text-street-orange">
+            Store details
+          </p>
 
-      {/* Products */}
-      <section className="space-y-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-          Products
-        </h2>
+          <h2 className="mt-1 text-2xl font-black text-kasi-black">
+            Business information
+          </h2>
+
+          <div className="mt-5 grid gap-3 text-sm">
+            <DetailRow label="Store name" value={store.name} />
+            <DetailRow label="Slug" value={store.slug} />
+            <DetailRow label="Phone" value={store.phone || "Not provided"} />
+            <DetailRow label="Prep time" value={`${store.avgPrepTimeMinutes} min`} />
+            <DetailRow label="Collection radius" value={`${store.collectionRadiusKm} km`} />
+            <DetailRow
+              label="Coordinates"
+              value={
+                store.lat && store.lng
+                  ? `${store.lat.toFixed(5)}, ${store.lng.toFixed(5)}`
+                  : "Missing"
+              }
+            />
+            <DetailRow
+              label="Created"
+              value={formatDistanceToNow(store.createdAt, { addSuffix: true })}
+            />
+          </div>
+        </div>
+
+        <div className="rounded-4xl border border-black/10 bg-white p-5 shadow-sm">
+          <p className="text-xs font-black uppercase tracking-wide text-street-orange">
+            Owner
+          </p>
+
+          <h2 className="mt-1 text-2xl font-black text-kasi-black">
+            Account details
+          </h2>
+
+          <div className="mt-5 grid gap-3 text-sm">
+            <DetailRow label="Name" value={store.owner.name} />
+            <DetailRow label="Email" value={store.owner.email} />
+            <DetailRow label="Phone" value={store.owner.phone || "Not provided"} />
+            <DetailRow label="Role" value={store.owner.role} />
+
+            {store.approvedAt && (
+              <DetailRow
+                label="Approved"
+                value={formatDistanceToNow(store.approvedAt, {
+                  addSuffix: true,
+                })}
+              />
+            )}
+
+            {store.approvedBy && (
+              <DetailRow
+                label="Approved by"
+                value={`${store.approvedBy.name} · ${store.approvedBy.email}`}
+              />
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-4xl border border-black/10 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-black uppercase tracking-wide text-street-orange">
+              Menu
+            </p>
+
+            <h2 className="mt-1 text-2xl font-black text-kasi-black">
+              Products
+            </h2>
+          </div>
+
+          <Link
+            href={`/admin/stores/${store.id}/products`}
+            className="inline-flex rounded-full bg-kasi-green px-4 py-2 text-xs font-black uppercase tracking-wide text-white transition hover:bg-street-orange"
+          >
+            Manage products →
+          </Link>
+        </div>
 
         {store.products.length === 0 ? (
-          <p className="text-sm text-slate-500 dark:text-slate-400">
+          <p className="mt-4 rounded-3xl bg-kasi-cream p-4 text-sm font-bold text-black/60">
             No products found.
           </p>
         ) : (
-          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
-              <thead className="bg-slate-50 dark:bg-slate-950/40">
-                <tr>
-                  <Th>Name</Th>
-                  <Th>Price</Th>
-                  <Th>Adj %</Th>
-                  <Th>Available</Th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {store.products.map((product) => (
-                  <tr
-                    key={product.id}
-                    className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40"
-                  >
-                    <Td>
-                      <a
-                        href={`/admin/stores/${storeId}/products/${product.id}`}
-                        className="font-medium text-emerald-600 hover:underline"
-                      >
-                        {product.name}
-                      </a>
-                    </Td>
-                    <Td>
-                      {/* calculate display price similar to product listing */}
-                      {(() => {
-                        let base = product.priceCents;
-                        const storeAny = store as any;
-                        const prodAny = product as any;
-                        if (prodAny.priceAdjustmentEnabled && prodAny.priceAdjustmentPercent) {
-                          base = applyPriceAdjustment(
-                            base,
-                            prodAny.priceAdjustmentEnabled,
-                            prodAny.priceAdjustmentPercent,
-                          );
-                        }
-                        if (storeAny.priceAdjustmentEnabled && storeAny.priceAdjustmentPercent !== 0) {
-                          base = applyPriceAdjustment(
-                            base,
-                            storeAny.priceAdjustmentEnabled,
-                            storeAny.priceAdjustmentPercent,
-                          );
-                        }
-                        return formatPrice(base);
-                      })()}
-                    </Td>
-                    <Td>
-                      {((product as any).priceAdjustmentEnabled &&
-                        (product as any).priceAdjustmentPercent !== 0)
-                        ? `${(product as any).priceAdjustmentPercent}%`
-                        : "—"}
-                    </Td>
-                    <Td>
-                      <span
-                        className={
-                          product.isAvailable
-                            ? "text-green-600 dark:text-green-400"
-                            : "text-red-600 dark:text-red-400"
-                        }
-                      >
-                        {product.isAvailable ? "Yes" : "No"}
-                      </span>
-                    </Td>
+          <div className="mt-4 overflow-hidden rounded-3xl border border-black/10">
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-kasi-black text-white">
+                  <tr>
+                    <Th>Name</Th>
+                    <Th>Base price</Th>
+                    <Th>Available</Th>
+                    <Th>Created</Th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+
+                <tbody className="divide-y divide-black/10 bg-white">
+                  {store.products.map((product) => (
+                    <tr key={product.id} className="hover:bg-kasi-cream">
+                      <Td>
+                        <Link
+                          href={`/admin/stores/${store.id}/products/${product.id}`}
+                          className="font-black text-kasi-green hover:text-street-orange"
+                        >
+                          {product.name}
+                        </Link>
+                      </Td>
+
+                      <Td>{formatMoney(product.priceCents)}</Td>
+
+                      <Td>
+                        <span
+                          className={[
+                            "rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wide",
+                            product.isAvailable
+                              ? "bg-kasi-green/10 text-kasi-green"
+                              : "bg-red-50 text-red-600",
+                          ].join(" ")}
+                        >
+                          {product.isAvailable ? "Available" : "Hidden"}
+                        </span>
+                      </Td>
+
+                      <Td>
+                        {formatDistanceToNow(product.createdAt, {
+                          addSuffix: true,
+                        })}
+                      </Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </section>
 
-      {/* Recent Orders */}
-      <section className="space-y-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-          Recent Orders
+      <section className="rounded-4xl border border-black/10 bg-white p-5 shadow-sm">
+        <p className="text-xs font-black uppercase tracking-wide text-street-orange">
+          Recent orders
+        </p>
+
+        <h2 className="mt-1 text-2xl font-black text-kasi-black">
+          Latest activity
         </h2>
 
         {store.orders.length === 0 ? (
-          <p className="text-sm text-slate-500 dark:text-slate-400">
+          <p className="mt-4 rounded-3xl bg-kasi-cream p-4 text-sm font-bold text-black/60">
             No orders yet.
           </p>
         ) : (
-          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
-              <thead className="bg-slate-50 dark:bg-slate-950/40">
-                <tr>
-                  <Th>Order</Th>
-                  <Th>Customer</Th>
-                  <Th>Total</Th>
-                  <Th>Status</Th>
-                  <Th>Created</Th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {store.orders.map((order) => (
-                  <tr
-                    key={order.id}
-                    className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40"
-                  >
-                    <Td>#{order.id.slice(-6)}</Td>
-                    <Td>{order.customerName}</Td>
-                    <Td>{formatPrice(order.totalCents)}</Td>
-                    <Td>{order.status}</Td>
-                    <Td>
-                      {formatDistanceToNow(order.createdAt, {
-                        addSuffix: true,
-                      })}
-                    </Td>
+          <div className="mt-4 overflow-hidden rounded-3xl border border-black/10">
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-kasi-black text-white">
+                  <tr>
+                    <Th>Order</Th>
+                    <Th>Customer</Th>
+                    <Th>Total</Th>
+                    <Th>Status</Th>
+                    <Th>Created</Th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+
+                <tbody className="divide-y divide-black/10 bg-white">
+                  {store.orders.map((order) => (
+                    <tr key={order.id} className="hover:bg-kasi-cream">
+                      <Td>#{order.id.slice(-6)}</Td>
+                      <Td>{order.customerName || "Walk-in customer"}</Td>
+                      <Td>{formatMoney(order.totalCents)}</Td>
+                      <Td>{order.status.replace(/_/g, " ")}</Td>
+                      <Td>
+                        {formatDistanceToNow(order.createdAt, {
+                          addSuffix: true,
+                        })}
+                      </Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </section>
+    </main>
+  );
+}
+
+function formatMoney(cents: number) {
+  return `R ${(cents / 100).toFixed(2)}`;
+}
+
+function StoreStatusBadge({ status }: { status: string }) {
+  const className =
+    status === "APPROVED"
+      ? "bg-kasi-green/10 text-kasi-green ring-kasi-green/20"
+      : status === "REJECTED"
+        ? "bg-red-50 text-red-600 ring-red-200"
+        : status === "DEACTIVATED"
+          ? "bg-black/10 text-black/60 ring-black/10"
+          : "bg-golden-yellow/25 text-kasi-black ring-golden-yellow/40";
+
+  return (
+    <span
+      className={[
+        "inline-flex rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wide ring-1",
+        className,
+      ].join(" ")}
+    >
+      {status.replace(/_/g, " ")}
+    </span>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl bg-kasi-cream px-4 py-3">
+      <p className="text-xs font-black uppercase tracking-wide text-black/45">
+        {label}
+      </p>
+      <p className="mt-1 font-bold text-kasi-black">{value}</p>
     </div>
   );
 }
 
-/* ------------------------------
-   Small reusable table utilities
---------------------------------*/
 function Th({ children }: { children: React.ReactNode }) {
   return (
-    <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-300">
+    <th className="px-4 py-3 text-left text-xs font-black uppercase tracking-wide text-white/70">
       {children}
     </th>
   );
 }
 
 function Td({ children }: { children: React.ReactNode }) {
-  return (
-    <td className="px-4 py-2 text-sm text-slate-800 dark:text-slate-200">
-      {children}
-    </td>
-  );
+  return <td className="px-4 py-3 font-bold text-black/70">{children}</td>;
 }
 
-/* ------------------------------
-   Overview card component
---------------------------------*/
 function OverviewCard({
   label,
   value,
@@ -275,13 +420,11 @@ function OverviewCard({
   value: string | number;
 }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 text-center shadow-sm dark:border-slate-800 dark:bg-slate-900">
-      <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
+    <div className="rounded-4xl border border-black/10 bg-white p-5 shadow-sm">
+      <p className="text-xs font-black uppercase tracking-wide text-street-orange">
         {label}
       </p>
-      <p className="mt-1 text-lg font-bold text-slate-900 dark:text-slate-50">
-        {value}
-      </p>
+      <p className="mt-2 text-2xl font-black text-kasi-black">{value}</p>
     </div>
   );
 }
