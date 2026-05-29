@@ -233,7 +233,7 @@ export default async function OwnerOrdersPage({
     shortId: order.id.slice(-6),
     createdAt: order.createdAt,
     customerName: order.customerName,
-    totalCents: order.totalCents,
+    totalCents: order.totalCents,source: order.source,
     status: order.status,
     estimatedReadyAt: order.estimatedReadyAt ?? undefined,
     note: order.note,

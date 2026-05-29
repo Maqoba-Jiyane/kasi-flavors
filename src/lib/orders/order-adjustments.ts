@@ -1,3 +1,5 @@
+// src/lib/orders/order-adjustments.ts
+
 import type { Prisma } from "@prisma/client";
 import { applyLedgerEntryTx } from "@/lib/ledger";
 
@@ -5,16 +7,13 @@ type PrismaTx = Prisma.TransactionClient;
 
 type OrderItemForAdjustment = {
   quantity: number;
-  baseUnitCents?: number | null;
+  baseUnitCents: number;
   unitCents: number;
 };
 
 function calculateOrderAdjustmentCents(items: OrderItemForAdjustment[]) {
   return items.reduce((sum, item) => {
-    const baseUnitCents = item.baseUnitCents ?? item.unitCents;
-    const adjustedUnitCents = item.unitCents;
-    const differencePerUnit = adjustedUnitCents - baseUnitCents;
-
+    const differencePerUnit = item.unitCents - item.baseUnitCents;
     return sum + differencePerUnit * item.quantity;
   }, 0);
 }
@@ -70,7 +69,7 @@ export async function applyOrderPriceAdjustmentLedgerTx({
       type: "FEE_DEBIT",
       amountCents: adjustmentCents,
       orderId: order.id,
-      note: "Platform price adjustment fee charged.",
+      note: "Platform price adjustment fee charged on completed order.",
     });
 
     await tx.order.update({
@@ -91,7 +90,7 @@ export async function applyOrderPriceAdjustmentLedgerTx({
     type: "REFUND",
     amountCents: discountCents,
     orderId: order.id,
-    note: "Platform discount credited to store.",
+    note: "Platform discount credited to store on completed order.",
   });
 
   await tx.order.update({
