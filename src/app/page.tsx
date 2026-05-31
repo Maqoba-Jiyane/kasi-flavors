@@ -65,9 +65,9 @@ export default async function HomePage({
     redirect("/owner/store/overview");
   }
 
-  // if (user?.role !== "ADMIN") {
-  //   return <KasiLaunchLanding />;
-  // }
+  if (user?.role !== "ADMIN") {
+    return <KasiLaunchLanding />;
+  }
 
   const sp = await searchParams;
 
