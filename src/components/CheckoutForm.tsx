@@ -315,7 +315,7 @@ export function CheckoutForm({
       </div>
 
       {showOtpField && (
-        <div className="rounded-[1.5rem] border-2 border-street-orange/25 bg-street-orange/10 p-4">
+        <div className="rounded-3xl border-2 border-street-orange/25 bg-street-orange/10 p-4">
           <label className={labelClass}>WhatsApp verification code</label>
 
           <input
@@ -390,7 +390,7 @@ export function CheckoutForm({
         </div>
 
         {fulfilmentType === "DELIVERY" && (
-          <div className="mt-4 space-y-4 rounded-[1.5rem] border border-black/10 bg-white p-4">
+          <div className="mt-4 space-y-4 rounded-3xl border border-black/10 bg-white p-4">
             {deliveryRadiusKm && (
               <div className="rounded-2xl bg-golden-yellow/25 p-3 text-xs font-bold leading-5 text-kasi-black">
                 📍 Delivery is available within {deliveryRadiusKm}km. Use your
@@ -616,7 +616,7 @@ export function CheckoutForm({
         </div>
       )}
 
-      <div className="rounded-[1.5rem] bg-kasi-black p-4 text-white">
+      <div className="rounded-3xl bg-kasi-black p-4 text-white">
         <p className="text-xs font-black uppercase tracking-wide text-golden-yellow">
           Payment
         </p>

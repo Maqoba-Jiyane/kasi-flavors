@@ -11,7 +11,6 @@ import {
   getAllCollectionStores,
   getOpenCollectionStores,
 } from "@/lib/stores/getCollectionStores";
-import { KasiLaunchLanding } from "@/components/launch/KasiLaunchLanding";
 
 export const metadata: Metadata = {
   title: "Order kasi food for collection",
@@ -63,10 +62,6 @@ export default async function HomePage({
 
   if (user?.role === "STORE_OWNER") {
     redirect("/owner/store/overview");
-  }
-
-  if (user?.role !== "ADMIN") {
-    return <KasiLaunchLanding />;
   }
 
   const sp = await searchParams;
