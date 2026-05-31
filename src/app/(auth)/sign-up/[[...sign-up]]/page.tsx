@@ -4,31 +4,32 @@
 import { SignUp } from "@clerk/nextjs";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { Suspense, useMemo } from "react";
 
-export default function SignUpPage() {
+function getSafeRedirectUrl(value: string | null) {
+  if (!value) return null;
+
+  // Only allow internal redirects.
+  // Prevents redirecting users to external URLs after auth.
+  if (!value.startsWith("/")) return null;
+  if (value.startsWith("//")) return null;
+
+  return value;
+}
+
+function SignUpPageContent() {
   const searchParams = useSearchParams();
 
-  const initialRedirect = useMemo(() => {
-    try {
-      const redirectUrl =
-        searchParams?.get("redirectUrl") || searchParams?.get("redirect_url");
+  const redirectUrl = useMemo(() => {
+    const rawRedirect =
+      searchParams.get("redirect_url") || searchParams.get("redirectUrl");
 
-      if (redirectUrl) return redirectUrl;
-
-      if (typeof window !== "undefined") {
-        const params = new URLSearchParams(window.location.search);
-
-        return params.get("redirectUrl") || params.get("redirect_url");
-      }
-
-      return null;
-    } catch {
-      return null;
-    }
+    return getSafeRedirectUrl(rawRedirect);
   }, [searchParams]);
 
-  const [redirectUrl] = useState<string | null>(initialRedirect);
+  const signInUrl = redirectUrl
+    ? `/sign-in?redirect_url=${encodeURIComponent(redirectUrl)}`
+    : "/sign-in";
 
   return (
     <main className="min-h-screen bg-kasi-black">
@@ -42,7 +43,7 @@ export default function SignUpPage() {
         </div>
 
         <div className="relative mx-auto grid w-full max-w-6xl items-center justify-center gap-8 lg:grid-cols-[0.95fr_1.05fr]">
-          <div className=" text-white lg:block">
+          <div className="text-white lg:block">
             <Link
               href="/"
               className="inline-flex rounded-full border border-white/10 bg-white/10 px-4 py-2 text-xs font-black uppercase tracking-wide text-golden-yellow transition hover:bg-white hover:text-kasi-black"
@@ -60,8 +61,8 @@ export default function SignUpPage() {
             </p>
           </div>
 
-          <div className="mx-auto w-full max-w-[420px]">
-            <div className="w-full overflow-hidden rounded-[1.75rem] border border-white/10 bg-white px-3 py-4 shadow-2xl sm:rounded-[2rem] sm:px-6 sm:py-6">
+          <div className="mx-auto w-full max-w-105">
+            <div className="w-full overflow-hidden rounded-[1.75rem] border border-white/10 bg-white px-3 py-4 shadow-2xl sm:rounded-4xl sm:px-6 sm:py-6">
               <div className="mb-4 px-1 sm:mb-5 sm:px-0">
                 <p className="text-xs font-black uppercase tracking-wide text-street-orange">
                   Sign up
@@ -115,21 +116,15 @@ export default function SignUpPage() {
                 }}
                 routing="path"
                 path="/sign-up"
-                signInUrl="/sign-in"
-                redirectUrl={redirectUrl ?? undefined}
-                forceRedirectUrl={redirectUrl ?? undefined}
-                afterSignUpUrl={redirectUrl ?? undefined}
+                signInUrl={signInUrl}
+                forceRedirectUrl={redirectUrl || "/"}
                 fallbackRedirectUrl="/"
               />
 
               <p className="mt-5 px-1 text-center text-xs font-medium leading-5 text-black/45 sm:px-0">
                 Already have an account?{" "}
                 <Link
-                  href={
-                    redirectUrl
-                      ? `/sign-in?redirectUrl=${encodeURIComponent(redirectUrl)}`
-                      : "/sign-in"
-                  }
+                  href={signInUrl}
                   className="font-black text-kasi-green hover:text-street-orange"
                 >
                   Sign in
@@ -140,5 +135,13 @@ export default function SignUpPage() {
         </div>
       </section>
     </main>
+  );
+}
+
+export default function SignUpPage() {
+  return (
+    <Suspense fallback={null}>
+      <SignUpPageContent />
+    </Suspense>
   );
 }

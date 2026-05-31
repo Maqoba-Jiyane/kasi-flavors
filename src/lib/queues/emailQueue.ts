@@ -50,10 +50,8 @@ function getQstashClient() {
 }
 
 function buildUrl(path: string) {
-  const appUrl = getAppUrl();
   const cleanPath = path.startsWith("/") ? path : `/${path}`;
-
-  return `${appUrl}${cleanPath}`;
+  return `${getAppUrl()}${cleanPath}`;
 }
 
 export async function enqueueOrderConfirmationEmail({
@@ -62,11 +60,11 @@ export async function enqueueOrderConfirmationEmail({
   userId,
 }: EnqueueOrderConfirmationArgs) {
   const qstash = getQstashClient();
-
   const destinationUrl = buildUrl("/api/qstash/order-confirmation");
 
-  return qstash.publishJSON({
+  const result = await qstash.publishJSON({
     url: destinationUrl,
+    retries: 5,
     body: {
       type: "ORDER_CONFIRMATION",
       tenantId,
@@ -74,6 +72,18 @@ export async function enqueueOrderConfirmationEmail({
       userId,
     },
   });
+
+  if (process.env.NODE_ENV !== "production") {
+    console.info("[emailQueue] order confirmation job queued", {
+      destinationUrl,
+      tenantId,
+      orderId,
+      userId,
+      messageId: result.messageId,
+    });
+  }
+
+  return result;
 }
 
 export async function enqueueOrderReadyEmail({
@@ -86,11 +96,11 @@ export async function enqueueOrderReadyEmail({
   fulfilmentType,
 }: EnqueueOrderReadyEmailArgs) {
   const qstash = getQstashClient();
-
   const destinationUrl = buildUrl("/api/qstash/order-ready-email");
 
-  return qstash.publishJSON({
+  const result = await qstash.publishJSON({
     url: destinationUrl,
+    retries: 5,
     body: {
       type: "ORDER_READY",
       tenantId,
@@ -102,4 +112,16 @@ export async function enqueueOrderReadyEmail({
       fulfilmentType,
     },
   });
+
+  if (process.env.NODE_ENV !== "production") {
+    console.info("[emailQueue] order ready job queued", {
+      destinationUrl,
+      tenantId,
+      to,
+      orderId,
+      messageId: result.messageId,
+    });
+  }
+
+  return result;
 }

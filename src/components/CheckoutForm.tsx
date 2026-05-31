@@ -21,6 +21,7 @@ interface Props {
   deliveryRadiusKm?: number;
   supportsDelivery?: boolean;
   onlinePaymentsEnabled?: boolean;
+  cashOnCollectionEnabled?: boolean;
 }
 
 export function CheckoutForm({
@@ -30,7 +31,8 @@ export function CheckoutForm({
   deliveryFeeCents,
   deliveryRadiusKm,
   supportsDelivery,
-  onlinePaymentsEnabled,
+  onlinePaymentsEnabled = true,
+  cashOnCollectionEnabled = false,
 }: Props) {
   const router = useRouter();
 
@@ -43,9 +45,19 @@ export function CheckoutForm({
     "COLLECTION" | "DELIVERY"
   >("COLLECTION");
 
-  const [paymentMethod, setPaymentMethod] = useState<
-    "CASH_ON_DELIVERY" | "ONLINE_PAYMENT"
-  >("CASH_ON_DELIVERY");
+  type CheckoutPaymentMethod =
+    | "ONLINE_PAYMENT"
+    | "CASH_ON_COLLECTION"
+    | "CASH_ON_DELIVERY";
+
+  const defaultPaymentMethod: CheckoutPaymentMethod = onlinePaymentsEnabled
+    ? "ONLINE_PAYMENT"
+    : cashOnCollectionEnabled
+      ? "CASH_ON_COLLECTION"
+      : "ONLINE_PAYMENT";
+
+  const [paymentMethod, setPaymentMethod] =
+    useState<CheckoutPaymentMethod>(defaultPaymentMethod);
 
   const [useMyLocation, setUseMyLocation] = useState(false);
   const [locating, setLocating] = useState(false);
@@ -62,6 +74,23 @@ export function CheckoutForm({
 
     return `idemp_${Date.now()}_${Math.random().toString(16).slice(2)}`;
   });
+
+  const canPayOnline = onlinePaymentsEnabled === true;
+
+  const canPayCashOnCollection =
+    fulfilmentType === "COLLECTION" && cashOnCollectionEnabled === true;
+
+  const canPayCashOnDelivery = fulfilmentType === "DELIVERY";
+
+  const cashPaymentMethod =
+    fulfilmentType === "DELIVERY" ? "CASH_ON_DELIVERY" : "CASH_ON_COLLECTION";
+
+  const canUseCurrentPaymentMethod =
+    paymentMethod === "ONLINE_PAYMENT"
+      ? canPayOnline
+      : paymentMethod === "CASH_ON_COLLECTION"
+        ? canPayCashOnCollection
+        : canPayCashOnDelivery;
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -92,7 +121,7 @@ export function CheckoutForm({
           setShowOtpField(true);
           setOtpError(null);
           setError(
-            "We sent a WhatsApp code to your number. Please enter it below."
+            "We sent a WhatsApp code to your number. Please enter it below.",
           );
           setProcessing(false);
           return;
@@ -180,7 +209,7 @@ export function CheckoutForm({
         setLocationError(err.message || "Unable to retrieve location");
         setLocating(false);
       },
-      { enableHighAccuracy: true, timeout: 10000 }
+      { enableHighAccuracy: true, timeout: 10000 },
     );
   }
 
@@ -204,6 +233,29 @@ export function CheckoutForm({
         ? "border-kasi-green bg-kasi-green/10"
         : "border-black/10 bg-white hover:border-kasi-green/40"
     }`;
+
+  React.useEffect(() => {
+    if (canUseCurrentPaymentMethod) return;
+
+    if (canPayOnline) {
+      setPaymentMethod("ONLINE_PAYMENT");
+      return;
+    }
+
+    if (canPayCashOnCollection) {
+      setPaymentMethod("CASH_ON_COLLECTION");
+      return;
+    }
+
+    if (canPayCashOnDelivery) {
+      setPaymentMethod("CASH_ON_DELIVERY");
+    }
+  }, [
+    canUseCurrentPaymentMethod,
+    canPayOnline,
+    canPayCashOnCollection,
+    canPayCashOnDelivery,
+  ]);
 
   return (
     <form
@@ -461,33 +513,7 @@ export function CheckoutForm({
         <label className={labelClass}>Payment method</label>
 
         <div className="grid gap-3 sm:grid-cols-2">
-          <label
-            className={optionCardClass(paymentMethod === "CASH_ON_DELIVERY")}
-          >
-            <span className="flex flex-col">
-              <span className="text-sm font-black">
-                Cash on{" "}
-                {fulfilmentType === "DELIVERY" ? "Delivery" : "Collection"}
-              </span>
-
-              <span className="mt-1 text-xs font-medium text-black/55">
-                Pay when your order{" "}
-                {fulfilmentType === "DELIVERY" ? "arrives" : "is ready"}
-              </span>
-            </span>
-
-            <input
-              type="radio"
-              name="paymentMethod"
-              value="CASH_ON_DELIVERY"
-              checked={paymentMethod === "CASH_ON_DELIVERY"}
-              onChange={() => setPaymentMethod("CASH_ON_DELIVERY")}
-              disabled={processing}
-              className="h-4 w-4 accent-kasi-green"
-            />
-          </label>
-
-          {onlinePaymentsEnabled && (
+          {canPayOnline && (
             <label
               className={optionCardClass(paymentMethod === "ONLINE_PAYMENT")}
             >
@@ -495,7 +521,7 @@ export function CheckoutForm({
                 <span className="text-sm font-black">Pay online</span>
 
                 <span className="mt-1 text-xs font-medium text-black/55">
-                  Secure card payment
+                  Secure card payment. Recommended.
                 </span>
               </span>
 
@@ -510,7 +536,66 @@ export function CheckoutForm({
               />
             </label>
           )}
+
+          {canPayCashOnCollection && (
+            <label
+              className={optionCardClass(
+                paymentMethod === "CASH_ON_COLLECTION",
+              )}
+            >
+              <span className="flex flex-col">
+                <span className="text-sm font-black">Cash on collection</span>
+
+                <span className="mt-1 text-xs font-medium text-black/55">
+                  Pay the store when your order is ready.
+                </span>
+              </span>
+
+              <input
+                type="radio"
+                name="paymentMethod"
+                value="CASH_ON_COLLECTION"
+                checked={paymentMethod === "CASH_ON_COLLECTION"}
+                onChange={() => setPaymentMethod("CASH_ON_COLLECTION")}
+                disabled={processing}
+                className="h-4 w-4 accent-kasi-green"
+              />
+            </label>
+          )}
+
+          {canPayCashOnDelivery && (
+            <label
+              className={optionCardClass(paymentMethod === "CASH_ON_DELIVERY")}
+            >
+              <span className="flex flex-col">
+                <span className="text-sm font-black">Cash on delivery</span>
+
+                <span className="mt-1 text-xs font-medium text-black/55">
+                  Pay when your order arrives.
+                </span>
+              </span>
+
+              <input
+                type="radio"
+                name="paymentMethod"
+                value="CASH_ON_DELIVERY"
+                checked={paymentMethod === "CASH_ON_DELIVERY"}
+                onChange={() => setPaymentMethod("CASH_ON_DELIVERY")}
+                disabled={processing}
+                className="h-4 w-4 accent-kasi-green"
+              />
+            </label>
+          )}
         </div>
+
+        {!canPayOnline &&
+          !canPayCashOnCollection &&
+          fulfilmentType === "COLLECTION" && (
+            <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-xs font-bold text-red-600">
+              This store is not accepting online payments or cash on collection
+              right now. Please try again later.
+            </div>
+          )}
       </div>
 
       <div>
@@ -539,11 +624,10 @@ export function CheckoutForm({
         <p className="mt-1 text-sm font-medium text-white/70">
           {paymentMethod === "ONLINE_PAYMENT" ? (
             <span>Secure online payment will open after submitting.</span>
+          ) : paymentMethod === "CASH_ON_COLLECTION" ? (
+            <span>You will pay cash when collecting your order.</span>
           ) : (
-            <span>
-              You will pay cash on{" "}
-              {fulfilmentType === "DELIVERY" ? "delivery" : "collection"}.
-            </span>
+            <span>You will pay cash when your delivery arrives.</span>
           )}
         </p>
       </div>
@@ -551,7 +635,7 @@ export function CheckoutForm({
       <div className="flex items-center justify-end pt-2">
         <button
           type="submit"
-          disabled={processing}
+          disabled={processing || !canUseCurrentPaymentMethod}
           className={`inline-flex w-full items-center justify-center rounded-full px-6 py-4 text-sm font-black text-white shadow-sm transition sm:w-auto ${
             processing
               ? "cursor-wait bg-kasi-green/80"

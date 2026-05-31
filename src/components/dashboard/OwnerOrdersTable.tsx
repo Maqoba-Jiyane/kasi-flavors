@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useState, useTransition } from "react";
-import { OrderStatus } from "@prisma/client";
+import { OrderStatus, PaymentMethod } from "@prisma/client";
 import { StatusBadge } from "./StatusBadge";
 import {
   updateOrderStatus,
@@ -24,6 +24,8 @@ type OwnerOrderRow = {
   customerName: string | null;
   totalCents: number;
   status: OrderStatus;
+  source: "CUSTOMER" | "MANUAL";
+  paymentMethod: PaymentMethod;
   estimatedReadyAt?: Date | null;
   note?: string | null;
   items: OwnerOrderItem[];
@@ -52,11 +54,53 @@ function formatDate(d: Date) {
   });
 }
 
+function paymentMethodLabel(paymentMethod: OwnerOrderRow["paymentMethod"]) {
+  switch (paymentMethod) {
+    case "ONLINE_PAYMENT":
+      return "Paid online";
+    case "CASH_ON_COLLECTION":
+      return "Cash on collection";
+    case "CASH_ON_DELIVERY":
+      return "Cash on delivery";
+    default:
+      return "Payment";
+  }
+}
+
+function paymentMethodClass(paymentMethod: OwnerOrderRow["paymentMethod"]) {
+  switch (paymentMethod) {
+    case "ONLINE_PAYMENT":
+      return "bg-kasi-green/10 text-kasi-green";
+    case "CASH_ON_COLLECTION":
+      return "bg-golden-yellow/30 text-kasi-black";
+    case "CASH_ON_DELIVERY":
+      return "bg-street-orange/10 text-street-orange";
+    default:
+      return "bg-black/10 text-black/60";
+  }
+}
+
 function humanizeStatus(status: OrderStatus) {
   return status
     .toLowerCase()
     .replace(/_/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function requiresCodeToComplete(order: OwnerOrderRow) {
+  return order.source !== "MANUAL" && order.status === "READY_FOR_COLLECTION";
+}
+
+function safeStatusOptions(order: OwnerOrderRow) {
+  const options = allowedNextStatuses(order.status);
+
+  if (!requiresCodeToComplete(order)) {
+    return options;
+  }
+
+  // Customer-created orders cannot be completed through normal dropdown.
+  // They can still be cancelled.
+  return options.filter((status) => status !== "COMPLETED");
 }
 
 function allowedNextStatuses(current: OrderStatus): OrderStatus[] {
@@ -76,6 +120,22 @@ function allowedNextStatuses(current: OrderStatus): OrderStatus[] {
   return [...nextLinear, "CANCELLED"];
 }
 
+async function handleCodeConfirm(formData: FormData) {
+  try {
+    const res = await confirmOrderWithCode(formData);
+
+    if (!res?.success) {
+      toast.error(res?.error || "Failed to confirm order");
+      return;
+    }
+
+    toast.success("Order completed!");
+  } catch (err) {
+    console.error("confirmOrderWithCode failed:", err);
+    toast.error("Server error. Please try again.");
+  }
+}
+
 async function handleStatusUpdate(formData: FormData) {
   try {
     const res = await updateOrderStatus(formData);
@@ -90,6 +150,51 @@ async function handleStatusUpdate(formData: FormData) {
     console.error("updateOrderStatus failed:", err);
     toast.error("Server error. Please try again.");
   }
+}
+
+function ConfirmCodeForm({ orderId }: { orderId: string }) {
+  const [isPending, startTransition] = useTransition();
+  const [code, setCode] = useState("");
+
+  function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+
+    const trimmedCode = code.trim();
+
+    if (isPending || !trimmedCode) return;
+
+    const fd = new FormData();
+    fd.append("orderId", orderId);
+    fd.append("code", trimmedCode);
+
+    startTransition(async () => {
+      await handleCodeConfirm(fd);
+      setCode("");
+    });
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="flex flex-wrap items-center gap-2">
+      <input type="hidden" name="orderId" value={orderId} />
+
+      <input
+        value={code}
+        onChange={(e) => setCode(e.target.value)}
+        maxLength={6}
+        inputMode="numeric"
+        placeholder="Pickup code"
+        className="min-w-0 flex-1 rounded-full border-2 border-black/10 bg-white px-3 py-2 text-xs font-semibold text-kasi-black outline-none focus:border-kasi-green focus:ring-4 focus:ring-kasi-green/10"
+      />
+
+      <button
+        type="submit"
+        disabled={isPending || code.trim().length === 0}
+        className="rounded-full bg-kasi-green px-4 py-2 text-xs font-black text-white transition hover:bg-street-orange disabled:opacity-60"
+      >
+        {isPending ? "Confirming..." : "Confirm"}
+      </button>
+    </form>
+  );
 }
 
 export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
@@ -125,8 +230,8 @@ export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
 
         {orders.map((order) => {
           const highlight = order.status === "READY_FOR_COLLECTION";
-          const needsPickupCode = order.status === "READY_FOR_COLLECTION";
-          const options = allowedNextStatuses(order.status);
+          const needsPickupCode = requiresCodeToComplete(order);
+          const options = safeStatusOptions(order);
           const hasActions = options.length > 0;
 
           return (
@@ -203,6 +308,15 @@ export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
                       Collection
                     </span>
 
+                    <span
+                      className={[
+                        "inline-flex rounded-full px-3 py-1",
+                        paymentMethodClass(order.paymentMethod),
+                      ].join(" ")}
+                    >
+                      {paymentMethodLabel(order.paymentMethod)}
+                    </span>
+
                     {order.estimatedReadyAt && (
                       <span className="inline-flex rounded-full bg-kasi-green/10 px-3 py-1 text-kasi-green">
                         ETA: {formatTime(order.estimatedReadyAt)}
@@ -222,7 +336,7 @@ export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
 
                   <div className="space-y-2">
                     {hasActions ? (
-                      <MobileStatusActions order={order} options={options} needsPickupCode />
+                      <MobileStatusActions order={order} options={options} />
                     ) : (
                       <p className="text-xs font-bold text-black/45">
                         No actions available for this order.
@@ -230,27 +344,11 @@ export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
                     )}
 
                     {needsPickupCode && (
-                      <form
-                        action={confirmOrderWithCode}
-                        className="flex flex-wrap items-center gap-2"
-                      >
-                        <input type="hidden" name="orderId" value={order.id} />
-
-                        <input
-                          name="code"
-                          maxLength={6}
-                          inputMode="numeric"
-                          placeholder="Pickup code"
-                          className="min-w-0 flex-1 rounded-full border-2 border-black/10 bg-white px-3 py-2 text-xs font-semibold text-kasi-black outline-none focus:border-kasi-green focus:ring-4 focus:ring-kasi-green/10"
-                        />
-
-                        <button
-                          type="submit"
-                          className="rounded-full bg-kasi-green px-4 py-2 text-xs font-black text-white transition hover:bg-street-orange"
-                        >
-                          Confirm
-                        </button>
-                      </form>
+                      <div className="mt-2 flex justify-end">
+                        <div className="w-full max-w-xs">
+                          <ConfirmCodeForm orderId={order.id} />
+                        </div>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -279,6 +377,9 @@ export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
                   Total
                 </th>
                 <th className="px-4 py-4 text-left text-xs font-black uppercase tracking-wide text-white/70">
+                  Payment
+                </th>
+                <th className="px-4 py-4 text-left text-xs font-black uppercase tracking-wide text-white/70">
                   ETA
                 </th>
                 <th className="px-4 py-4 text-left text-xs font-black uppercase tracking-wide text-white/70">
@@ -294,7 +395,7 @@ export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
               {!hasOrders && (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="px-4 py-8 text-center text-sm font-bold text-black/55"
                   >
                     No orders to show for the current filters.
@@ -304,8 +405,8 @@ export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
 
               {orders.map((order) => {
                 const highlight = order.status === "READY_FOR_COLLECTION";
-                const needsPickupCode = order.status === "READY_FOR_COLLECTION";
-                const options = allowedNextStatuses(order.status);
+                const needsPickupCode = requiresCodeToComplete(order);
+                const options = safeStatusOptions(order);
                 const hasActions = options.length > 0;
 
                 return (
@@ -347,6 +448,17 @@ export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
                     </td>
 
                     <td className="whitespace-nowrap px-4 py-4 align-middle">
+                      <span
+                        className={[
+                          "inline-flex rounded-full px-3 py-1.5 text-xs font-black",
+                          paymentMethodClass(order.paymentMethod),
+                        ].join(" ")}
+                      >
+                        {paymentMethodLabel(order.paymentMethod)}
+                      </span>
+                    </td>
+
+                    <td className="whitespace-nowrap px-4 py-4 align-middle">
                       {order.estimatedReadyAt ? (
                         <span className="text-xs font-black text-kasi-green">
                           {formatTime(order.estimatedReadyAt)}
@@ -372,31 +484,11 @@ export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
                       )}
 
                       {needsPickupCode && (
-                        <form
-                          action={confirmOrderWithCode}
-                          className="mt-2 flex items-center justify-end gap-2"
-                        >
-                          <input
-                            type="hidden"
-                            name="orderId"
-                            value={order.id}
-                          />
-
-                          <input
-                            name="code"
-                            maxLength={6}
-                            inputMode="numeric"
-                            placeholder="Pickup code"
-                            className="w-28 rounded-full border-2 border-black/10 bg-white px-3 py-1.5 text-xs font-semibold text-kasi-black outline-none focus:border-kasi-green focus:ring-4 focus:ring-kasi-green/10"
-                          />
-
-                          <button
-                            type="submit"
-                            className="rounded-full bg-kasi-green px-3 py-1.5 text-xs font-black text-white transition hover:bg-street-orange"
-                          >
-                            Confirm
-                          </button>
-                        </form>
+                        <div className="mt-2 flex justify-end">
+                          <div className="w-full max-w-xs">
+                            <ConfirmCodeForm orderId={order.id} />
+                          </div>
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -413,19 +505,15 @@ export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
 function MobileStatusActions({
   order,
   options,
-  needsPickupCode
 }: {
   order: OwnerOrderRow;
   options: OrderStatus[];
-  needsPickupCode: boolean;
 }) {
   const [isPending, startTransition] = useTransition();
-  const [selected, setSelected] = useState<OrderStatus | "">(
-    options[0] ?? ""
-  );
+  const [selected, setSelected] = useState<OrderStatus | "">(options[0] ?? "");
 
   const safeSelected: OrderStatus | "" =
-    selected && options.includes(selected) ? selected : options[0] ?? "";
+    selected && options.includes(selected) ? selected : (options[0] ?? "");
 
   const onSubmit = useCallback(
     (e: React.FormEvent<HTMLFormElement>) => {
@@ -441,7 +529,7 @@ function MobileStatusActions({
         await handleStatusUpdate(fd);
       });
     },
-    [isPending, order.id, safeSelected]
+    [isPending, order.id, safeSelected],
   );
 
   return (
@@ -466,7 +554,7 @@ function MobileStatusActions({
       <button
         type="submit"
         disabled={isPending || !safeSelected}
-        className={`rounded-full bg-kasi-black px-4 py-2 text-xs font-black text-white transition hover:bg-street-orange disabled:opacity-60 ${needsPickupCode ? "hidden" : ""}`}
+        className="rounded-full bg-kasi-black px-4 py-2 text-xs font-black text-white transition hover:bg-street-orange disabled:opacity-60"
       >
         {isPending ? "Saving..." : "Save"}
       </button>
@@ -482,12 +570,10 @@ function DesktopStatusActions({
   options: OrderStatus[];
 }) {
   const [isPending, startTransition] = useTransition();
-  const [selected, setSelected] = useState<OrderStatus | "">(
-    options[0] ?? ""
-  );
+  const [selected, setSelected] = useState<OrderStatus | "">(options[0] ?? "");
 
   const safeSelected: OrderStatus | "" =
-    selected && options.includes(selected) ? selected : options[0] ?? "";
+    selected && options.includes(selected) ? selected : (options[0] ?? "");
 
   const onSubmit = useCallback(
     (e: React.FormEvent<HTMLFormElement>) => {
@@ -503,7 +589,7 @@ function DesktopStatusActions({
         await handleStatusUpdate(fd);
       });
     },
-    [isPending, order.id, safeSelected]
+    [isPending, order.id, safeSelected],
   );
 
   return (
@@ -524,7 +610,7 @@ function DesktopStatusActions({
 
       <button
         type="submit"
-        disabled={isPending || !safeSelected}
+        disabled={isPending || !safeSelected || options.length === 0}
         className="rounded-full bg-kasi-black px-4 py-1.5 text-xs font-black text-white transition hover:bg-street-orange disabled:opacity-60"
       >
         {isPending ? "Saving..." : "Save"}

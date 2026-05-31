@@ -1,3 +1,5 @@
+// src/lib/orders/order-adjustments.ts
+
 import type { Prisma } from "@prisma/client";
 import { applyLedgerEntryTx } from "@/lib/ledger";
 
@@ -5,20 +7,34 @@ type PrismaTx = Prisma.TransactionClient;
 
 type OrderItemForAdjustment = {
   quantity: number;
-  baseUnitCents?: number | null;
+  baseUnitCents: number;
   unitCents: number;
 };
 
 function calculateOrderAdjustmentCents(items: OrderItemForAdjustment[]) {
   return items.reduce((sum, item) => {
-    const baseUnitCents = item.baseUnitCents ?? item.unitCents;
-    const adjustedUnitCents = item.unitCents;
-    const differencePerUnit = adjustedUnitCents - baseUnitCents;
-
+    const differencePerUnit = item.unitCents - item.baseUnitCents;
     return sum + differencePerUnit * item.quantity;
   }, 0);
 }
 
+/**
+ * Applies the platform price adjustment for an order.
+ *
+ * Meaning:
+ * - unitCents > baseUnitCents:
+ *   Customer paid more than the store base price.
+ *   Platform keeps the difference.
+ *   Ledger: FEE_DEBIT
+ *
+ * - unitCents < baseUnitCents:
+ *   Customer paid less than the store base price.
+ *   Platform credits the store for the difference.
+ *   Ledger: DISCOUNT_CREDIT
+ *
+ * - unitCents === baseUnitCents:
+ *   No platform adjustment.
+ */
 export async function applyOrderPriceAdjustmentLedgerTx({
   tx,
   orderId,
@@ -70,7 +86,7 @@ export async function applyOrderPriceAdjustmentLedgerTx({
       type: "FEE_DEBIT",
       amountCents: adjustmentCents,
       orderId: order.id,
-      note: "Platform price adjustment fee charged.",
+      note: "Platform price adjustment fee charged on order.",
     });
 
     await tx.order.update({
@@ -88,10 +104,10 @@ export async function applyOrderPriceAdjustmentLedgerTx({
 
   const entry = await applyLedgerEntryTx(tx, {
     storeId: order.storeId,
-    type: "REFUND",
+    type: "DISCOUNT_CREDIT",
     amountCents: discountCents,
     orderId: order.id,
-    note: "Platform discount credited to store.",
+    note: "Platform discount credited to store on order.",
   });
 
   await tx.order.update({

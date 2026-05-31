@@ -1,6 +1,6 @@
-const MIN_TOPUP_CENTS = 50_00; // R50
+const MIN_TOPUP_CENTS = 0; // R0
 
-export function getRequiredTopupCents(currentBalanceCents: number): number {
+export function getRequiredSettlementPaymentCents(currentBalanceCents: number): number {
   // If balance is negative, required top up = |balance| + R50
   // Example: -R20 => 2000 cents => 5000 + 2000 = 7000 (R70)
   if (currentBalanceCents < 0) {

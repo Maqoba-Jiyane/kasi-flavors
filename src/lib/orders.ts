@@ -37,7 +37,7 @@ export async function createOrderFromPayload(args: {
     note,
     customerId,
     idempotencyKey,
-    paymentMethod = "CASH_ON_COLLECTION",
+    paymentMethod = "ONLINE_PAYMENT",
     deliveryAddress,
     deliveryLat,
     deliveryLng,
@@ -62,10 +62,32 @@ export async function createOrderFromPayload(args: {
       avgPrepTimeMinutes: true,
       priceAdjustmentEnabled: true,
       priceAdjustmentPercent: true,
+      onlinePaymentsEnabled: true,
+      cashOnCollectionEnabled: true,
+      supportsDelivery: true,
     },
   });
 
   if (!store) throw new Error("Store not found");
+
+  if (paymentMethod === "ONLINE_PAYMENT" && !store.onlinePaymentsEnabled) {
+    throw new Error("Online payments are not available for this store");
+  }
+
+  if (
+    paymentMethod === "CASH_ON_COLLECTION" &&
+    (!store.cashOnCollectionEnabled || fulfilmentType !== "COLLECTION")
+  ) {
+    throw new Error("Cash on collection is not available for this order");
+  }
+
+  if (paymentMethod === "CASH_ON_DELIVERY") {
+    throw new Error("Cash on delivery is not available yet");
+  }
+
+  if (fulfilmentType === "DELIVERY" && !store.supportsDelivery) {
+    throw new Error("This store does not offer delivery");
+  }
 
   const activeOrderCount = await prisma.order.count({
     where: {
@@ -207,7 +229,11 @@ export async function createOrderFromPayload(args: {
 
       items: {
         create: orderItemsData.map((item) => ({
-          productId: item.productId,
+          product: {
+            connect: {
+              id: item.productId,
+            },
+          },
           name: item.name,
           quantity: item.quantity,
           baseUnitCents: item.baseUnitCents,

@@ -51,8 +51,12 @@ function formatDateTime(d: Date) {
 
 function getLedgerTypeLabel(type: LedgerType) {
   switch (type) {
-    case "TOPUP":
-      return "Top-up";
+    case "ORDER_CREDIT":
+      return "Online order credit";
+    case "DISCOUNT_CREDIT":
+      return "Discount credit";
+    case "SETTLEMENT_PAYMENT":
+      return "Settlement payment";
     case "REFUND":
       return "Refund";
     case "FEE_DEBIT":
@@ -69,7 +73,12 @@ function getLedgerTypeLabel(type: LedgerType) {
 }
 
 function isCreditPositiveType(type: LedgerType) {
-  return type === "TOPUP" || type === "REFUND";
+  return (
+    type === "ORDER_CREDIT" ||
+    type === "DISCOUNT_CREDIT" ||
+    type === "SETTLEMENT_PAYMENT" ||
+    type === "REFUND"
+  );
 }
 
 function getLedgerStatusClass(status: string) {
@@ -99,7 +108,7 @@ export default async function BillingPage() {
   if (!store) {
     return (
       <main className="min-h-screen bg-kasi-cream px-4 py-6">
-        <div className="mx-auto max-w-3xl rounded-[2rem] border border-black/10 bg-white p-6 text-sm shadow-sm">
+        <div className="mx-auto max-w-3xl rounded-4xl border border-black/10 bg-white p-6 text-sm shadow-sm">
           <p className="text-xs font-black uppercase tracking-wide text-street-orange">
             Store setup
           </p>
@@ -130,7 +139,7 @@ export default async function BillingPage() {
     <main className="py-2">
       <div className="space-y-5">
         <header className="grid gap-4 lg:grid-cols-[1fr_auto]">
-          <div className="rounded-[2rem] border border-black/10 bg-white p-5 shadow-sm">
+          <div className="rounded-4xl border border-black/10 bg-white p-5 shadow-sm">
             <p className="text-xs font-black uppercase tracking-wide text-street-orange">
               Billing
             </p>
@@ -145,7 +154,7 @@ export default async function BillingPage() {
             </p>
           </div>
 
-          <div className="flex items-center rounded-[2rem] border border-black/10 bg-white p-4 shadow-sm">
+          <div className="flex items-center rounded-4xl border border-black/10 bg-white p-4 shadow-sm">
             <Link
               href="/owner/store/orders"
               className="inline-flex rounded-full border-2 border-black/10 bg-white px-4 py-2 text-xs font-black uppercase tracking-wide text-kasi-black transition hover:border-kasi-black"
@@ -155,7 +164,7 @@ export default async function BillingPage() {
           </div>
         </header>
 
-        <section className="overflow-hidden rounded-[2rem] border border-black/10 bg-kasi-black text-white shadow-sm">
+        <section className="overflow-hidden rounded-4xl border border-black/10 bg-kasi-black text-white shadow-sm">
           <div className="relative p-6">
             <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full bg-street-orange opacity-40 blur-3xl" />
             <div className="absolute -bottom-16 left-10 h-48 w-48 rounded-full bg-kasi-green opacity-40 blur-3xl" />
@@ -163,7 +172,7 @@ export default async function BillingPage() {
             <div className="relative grid gap-5 lg:grid-cols-[1fr_auto] lg:items-center">
               <div>
                 <p className="text-xs font-black uppercase tracking-wide text-golden-yellow">
-                  Current store balance
+                  Current week balance
                 </p>
 
                 <p
@@ -177,38 +186,47 @@ export default async function BillingPage() {
 
                 <p className="mt-3 max-w-2xl text-sm font-medium leading-6 text-white/65">
                   {isNegativeBalance
-                    ? "Your balance is negative. You’ll need to top up before you can open your store and receive new orders."
-                    : "Positive balance is used to pay platform fees when orders are completed."}
+                    ? "Your current week balance is negative. If it remains negative at settlement time, you’ll need to pay the amount due."
+                    : currentBalance > 0
+                      ? "Your current week balance is positive. Kasi Flavors currently owes this amount to your store."
+                      : "Your current week balance is R0. There is nothing to settle right now."}
                 </p>
               </div>
 
               <div className="rounded-[1.75rem] border border-white/10 bg-white/10 p-5">
                 <p className="text-sm font-black uppercase tracking-wide text-golden-yellow">
-                  Need to settle?
+                  Settlement
                 </p>
 
                 <p className="mt-2 max-w-xs text-sm font-medium leading-6 text-white/65">
-                  Top up your balance to keep your store active and ready for
-                  customer orders.
+                  {isNegativeBalance
+                    ? "You currently owe Kasi Flavors. Make a settlement payment to clear the outstanding amount."
+                    : currentBalance > 0
+                      ? "Kasi Flavors currently owes your store. This will be handled during the settlement cycle."
+                      : "Your account is balanced. No settlement payment is required."}
                 </p>
 
-                <Link
-                  href="/owner/store/billing/topup"
-                  className={[
-                    "mt-4 inline-flex rounded-full px-5 py-3 text-sm font-black text-white shadow-sm transition",
-                    isNegativeBalance
-                      ? "bg-red-600 hover:bg-red-700"
-                      : "bg-kasi-green hover:bg-street-orange",
-                  ].join(" ")}
-                >
-                  Top up balance
-                </Link>
+                {isNegativeBalance ? (
+                  <Link
+                    href="/owner/store/billing/settlement-payment"
+                    className="mt-4 inline-flex rounded-full bg-red-600 px-5 py-3 text-sm font-black text-white shadow-sm transition hover:bg-red-700"
+                  >
+                    Pay settlement
+                  </Link>
+                ) : (
+                  <Link
+                    href="/owner/store/orders"
+                    className="mt-4 inline-flex rounded-full bg-kasi-green px-5 py-3 text-sm font-black text-white shadow-sm transition hover:bg-street-orange"
+                  >
+                    View orders
+                  </Link>
+                )}
               </div>
             </div>
           </div>
         </section>
 
-        <section className="rounded-[2rem] border border-black/10 bg-white p-5 text-xs shadow-sm">
+        <section className="rounded-4xl border border-black/10 bg-white p-5 text-xs shadow-sm">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <p className="text-xs font-black uppercase tracking-wide text-street-orange">
@@ -231,8 +249,8 @@ export default async function BillingPage() {
 
           {ledgerEntries.length === 0 ? (
             <p className="mt-4 rounded-2xl bg-kasi-cream p-4 text-sm font-medium text-black/60">
-              No billing activity yet. When you complete orders, pay fees, or
-              top up, transactions will appear here.
+              No billing activity yet. Online order credits, platform fees,
+              settlement payments, and payouts will appear here.
             </p>
           ) : (
             <>
@@ -241,16 +259,12 @@ export default async function BillingPage() {
                 {ledgerEntries.map((entry) => {
                   const isPositive = isCreditPositiveType(entry.type);
                   const sign =
-                    entry.type === "FEE_RESERVE"
-                      ? ""
-                      : isPositive
-                        ? "+"
-                        : "−";
+                    entry.type === "FEE_RESERVE" ? "" : isPositive ? "+" : "−";
 
                   return (
                     <article
                       key={entry.id}
-                      className="rounded-[1.5rem] border border-black/10 bg-kasi-cream p-4"
+                      className="rounded-3xl border border-black/10 bg-kasi-cream p-4"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>

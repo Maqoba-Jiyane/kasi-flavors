@@ -123,7 +123,8 @@ model Store {
   priceAdjustmentEnabled Boolean @default(false)
   priceAdjustmentPercent Float   @default(0)
 
-  onlinePaymentsEnabled Boolean @default(true)
+  onlinePaymentsEnabled   Boolean @default(true)
+  cashOnCollectionEnabled Boolean @default(false)
 
   products    Product[]
   orders      Order[]
@@ -135,6 +136,7 @@ model Store {
 
   Email          Email[]
   menuCategories MenuCategory[]
+  settlements    StoreSettlement[]
 
   @@index([approvalStatus])
   @@index([approvalStatus, isOpen])
@@ -322,12 +324,15 @@ model OrderItem {
 }
 
 enum LedgerType {
-  FEE_RESERVE // reserved when order created (not yet debited)
-  FEE_DEBIT // actual debit to store balance when fee is captured
-  TOPUP // store top up (owner payment)
-  REFUND // refund / reversal
-  PAYOUT // payout from platform to store (if you ever implement payouts)
-  ADJUSTMENT // manual admin adjustment
+  SETTLEMENT_PAYMENT
+  REFUND
+  FEE_DEBIT
+  FEE_RESERVE
+  PAYOUT
+  ADJUSTMENT
+
+  ORDER_CREDIT
+  DISCOUNT_CREDIT
 }
 
 enum LedgerStatus {
@@ -414,6 +419,42 @@ model Email {
   @@index([status])
   @@index([orderId])
   @@index([storeId])
+}
+
+model StoreSettlement {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  store   Store  @relation(fields: [storeId], references: [id])
+  storeId String @db.ObjectId
+
+  periodStart DateTime
+  periodEnd   DateTime
+
+  openingBalanceCents Int @default(0)
+  closingBalanceCents Int
+
+  status StoreSettlementStatus @default(PENDING)
+
+  payoutDueCents  Int @default(0)
+  depositDueCents Int @default(0)
+
+  settledAt DateTime?
+  note      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([storeId, periodStart, periodEnd])
+  @@index([storeId])
+  @@index([periodStart, periodEnd])
+}
+
+enum StoreSettlementStatus {
+  PENDING
+  PAYOUT_DUE
+  DEPOSIT_DUE
+  SETTLED
+  CANCELLED
 }
 
 model Cart {

@@ -78,6 +78,8 @@ async function updateStoreSettings(formData: FormData) {
       id: true,
       slug: true,
       approvalStatus: true,
+      onlinePaymentsEnabled: true,
+      cashOnCollectionEnabled: true,
     },
   });
 
@@ -99,11 +101,20 @@ async function updateStoreSettings(formData: FormData) {
     );
   }
 
+  const cashOnCollectionEnabled =
+    formData.get("cashOnCollectionEnabled") === "on";
+
   await prisma.store.update({
     where: { id: store.id },
     data: {
       isOpen: wantsToOpen,
       supportsCollection: true,
+
+      // Online-first model.
+      onlinePaymentsEnabled: true,
+
+      // Optional owner-controlled cash payments.
+      cashOnCollectionEnabled,
     },
   });
 
@@ -142,6 +153,8 @@ export default async function StoreOverviewPage({
       city: true,
       area: true,
       supportsCollection: true,
+      onlinePaymentsEnabled: true,
+      cashOnCollectionEnabled: true,
     },
   });
 
@@ -389,8 +402,8 @@ export default async function StoreOverviewPage({
 
               {isNegativeBalance && (
                 <p className="mt-3 rounded-2xl bg-red-50 p-3 text-xs font-bold leading-5 text-red-600">
-                  Your balance is negative. Consider keeping the store closed
-                  until settled.
+                  Your current week balance is negative. If it remains negative
+                  by Monday, you’ll need to settle the amount with Kasi Flavors.
                 </p>
               )}
             </div>
@@ -408,6 +421,39 @@ export default async function StoreOverviewPage({
                 Kasi Flavors is starting with collection orders. Customers order
                 online and collect when their food is ready.
               </p>
+            </div>
+
+            <div className="rounded-3xl border border-black/10 bg-kasi-cream p-4">
+              <p className="text-xs font-black uppercase tracking-wide text-black/45">
+                Payments
+              </p>
+
+              <div className="mt-3 rounded-2xl bg-white px-4 py-3 text-sm font-black text-kasi-black">
+                Online payments enabled
+              </div>
+
+              <p className="mt-3 text-xs font-medium leading-5 text-black/55">
+                Kasi Flavors is online-first. Customers will be encouraged to
+                pay securely online before collection.
+              </p>
+
+              <label className="mt-4 flex items-start gap-3 rounded-2xl bg-white px-4 py-3 text-sm font-black text-kasi-black">
+                <input
+                  type="checkbox"
+                  name="cashOnCollectionEnabled"
+                  defaultChecked={store.cashOnCollectionEnabled}
+                  disabled={!isApproved}
+                  className="mt-1 h-4 w-4 accent-kasi-green disabled:opacity-40"
+                />
+
+                <span>
+                  Allow cash on collection
+                  <span className="mt-1 block text-xs font-medium leading-5 text-black/50">
+                    Customers can pay you directly when collecting. Platform
+                    fees will be tracked in your weekly balance.
+                  </span>
+                </span>
+              </label>
             </div>
 
             <div className="flex flex-col gap-3 sm:col-span-2 sm:flex-row sm:items-center sm:justify-between">
@@ -428,14 +474,22 @@ export default async function StoreOverviewPage({
 
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
-            label="Balance"
+            label="Current week balance"
             value={formatMoney(currentBalance)}
             description={
               isNegativeBalance
-                ? "Negative balance — settle before opening."
-                : "Used to pay platform fees."
+                ? "You currently owe Kasi Flavors. This will be settled on Monday."
+                : currentBalance > 0
+                  ? "Kasi Flavors currently owes you. This will be settled on Monday."
+                  : "This week is currently balanced at R0."
             }
-            tone={isNegativeBalance ? "danger" : "success"}
+            tone={
+              isNegativeBalance
+                ? "danger"
+                : currentBalance > 0
+                  ? "success"
+                  : "default"
+            }
           />
 
           <StatCard

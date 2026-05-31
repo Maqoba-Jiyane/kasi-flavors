@@ -108,18 +108,23 @@ const ALLOWED_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
 };
 
 export async function updateOrderStatus(formData: FormData) {
-  const orderId = String(formData.get("orderId") || "");
+  const orderId = String(formData.get("orderId") || "").trim();
   const statusValue = formData.get("status");
 
   if (!orderId || !statusValue) {
-    throw new Error("Missing orderId or status");
+    return {
+      success: false,
+      error: "Missing orderId or status.",
+    };
   }
 
   const nextStatusRaw = String(statusValue);
 
-  // 1) Validate nextStatus is a known enum value
   if (!VALID_STATUSES.includes(nextStatusRaw as OrderStatus)) {
-    throw new Error("Invalid status value");
+    return {
+      success: false,
+      error: "Invalid status value.",
+    };
   }
 
   const nextStatus = nextStatusRaw as OrderStatus;
@@ -127,16 +132,21 @@ export async function updateOrderStatus(formData: FormData) {
   const user = await getCurrentUser();
   assertRole(user, ["STORE_OWNER"]);
 
-  // 2) Ensure this owner actually has a store
   const store = await prisma.store.findUnique({
     where: { ownerId: user.id },
+    select: {
+      id: true,
+      name: true,
+    },
   });
 
   if (!store) {
-    throw new Error("No store linked to this account");
+    return {
+      success: false,
+      error: "No store linked to this account.",
+    };
   }
 
-  // 3) Make sure the order belongs to this store owner
   const order = await prisma.order.findFirst({
     where: {
       id: orderId,
@@ -148,29 +158,71 @@ export async function updateOrderStatus(formData: FormData) {
   });
 
   if (!order) {
-    throw new Error("Order not found for this store owner");
+    return {
+      success: false,
+      error: "Order not found for this store owner.",
+    };
+  }
+
+  if (order.paymentMethod === "ONLINE_PAYMENT" && order.status === "PENDING") {
+    return {
+      success: false,
+      error: "This online payment order has not been paid yet.",
+    };
   }
 
   const previousStatus = order.status;
 
-  // 4) Enforce allowed transitions
   const allowedNext = ALLOWED_TRANSITIONS[previousStatus] || [];
+
   if (!allowedNext.includes(nextStatus)) {
     return {
       success: false,
-      error: `Cannot change status from ${previousStatus} to ${nextStatus}`,
+      error: `Cannot change status from ${previousStatus} to ${nextStatus}.`,
     };
   }
 
-  // 5) Update the status
-  await prisma.order.update({
-    where: { id: order.id },
-    data: {
-      status: nextStatus,
-    },
+  /**
+   * Important rule:
+   * Customer-created collection orders must be completed using the pickup code.
+   * Manual orders can be completed without code.
+   */
+  const requiresPickupCodeToComplete =
+    order.source !== "MANUAL" &&
+    order.fulfilmentType === "COLLECTION" &&
+    previousStatus === "READY_FOR_COLLECTION" &&
+    nextStatus === "COMPLETED";
+
+  if (requiresPickupCodeToComplete) {
+    return {
+      success: false,
+      error: "Enter the customer pickup code before completing this order.",
+    };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    const updatedOrder = await tx.order.update({
+      where: { id: order.id },
+      data: {
+        status: nextStatus,
+        completedAt:
+          nextStatus === "COMPLETED" ? new Date() : order.completedAt,
+      },
+      select: {
+        id: true,
+        status: true,
+        paymentMethod: true,
+      },
+    });
+
+    if (updatedOrder.status === "COMPLETED") {
+      await applyOrderPriceAdjustmentLedgerTx({
+        tx,
+        orderId: updatedOrder.id,
+      });
+    }
   });
 
-  // 7) Decide if we should send "order ready" email
   const becameReadyForCollection =
     nextStatus === "READY_FOR_COLLECTION" &&
     previousStatus !== "READY_FOR_COLLECTION";
@@ -184,48 +236,45 @@ export async function updateOrderStatus(formData: FormData) {
   if (shouldSendReadyEmail) {
     try {
       await enqueueOrderReadyEmail({
-        customerName: user.name,
-        fulfilmentType: order.fulfilmentType,
-        orderId: order.id,
-        pickupCode: order.pickupCode,
-        storeName: order.store.name,
         tenantId: order.storeId,
-        to: order.customerEmail || user.email,
-      });
-    } catch (err) {
-      console.error("Failed to send order ready email", err);
-      // don't break the status update if email fails
-    }
-  }
-
-  const shouldSendReadyWhatsApp =
-    (becameReadyForCollection || becameOutForDelivery) && !!order.customerPhone; // or order.customerPhone / order.customer?.phone depending on your model
-
-  if (shouldSendReadyWhatsApp) {
-    try {
-      await enqueueOrderReadyWhatsApp({
-        customerName: user.name,
+        to: order.customerEmail!,
+        customerName: order.customerName || "there",
         fulfilmentType: order.fulfilmentType,
         orderId: order.id,
         pickupCode: order.pickupCode,
         storeName: order.store.name,
-        to: order.customerPhone!, // adjust to whatever field you store the phone on
-        status: becameOutForDelivery
-          ? "OUT_FOR_DELIVERY"
-          : "READY_FOR_COLLECTION",
       });
     } catch (err) {
-      console.error("Failed to send order ready WhatsApp", err);
-      // don't break the status update if WhatsApp fails
+      console.error("Failed to enqueue order ready email", err);
     }
   }
 
-  // 7) Refresh the orders page on the server
+  // const shouldSendReadyWhatsApp =
+  //   (becameReadyForCollection || becameOutForDelivery) && !!order.customerPhone;
+
+  // if (shouldSendReadyWhatsApp) {
+  //   try {
+  //     await enqueueOrderReadyWhatsApp({
+  //       to: order.customerPhone!,
+  //       customerName: order.customerName || "there",
+  //       fulfilmentType: order.fulfilmentType,
+  //       orderId: order.id,
+  //       pickupCode: order.pickupCode,
+  //       storeName: order.store.name,
+  //       status: becameOutForDelivery
+  //         ? "OUT_FOR_DELIVERY"
+  //         : "READY_FOR_COLLECTION",
+  //     });
+  //   } catch (err) {
+  //     console.error("Failed to enqueue order ready WhatsApp", err);
+  //   }
+  // }
+
   revalidatePath("/owner/store/orders");
 
   return {
     success: true,
-    error: `Status changed from ${previousStatus} to ${nextStatus}`,
+    error: `Status changed from ${previousStatus} to ${nextStatus}.`,
   };
 }
 
@@ -233,52 +282,88 @@ export async function confirmOrderWithCode(formData: FormData) {
   const user = await getCurrentUser();
   assertRole(user, ["STORE_OWNER"]);
 
-  const orderId = (formData.get("orderId") as string | "").trim();
-  const rawCode = (formData.get("code") as string | "").trim();
+  const orderId = String(formData.get("orderId") || "").trim();
+  const rawCode = String(formData.get("code") || "").trim();
 
   if (!orderId || !rawCode) {
-    // Silent no-op (MVP); can wire to form error state later
-    return;
+    return {
+      success: false,
+      error: "Order ID and confirmation code are required.",
+    };
   }
 
   const store = await prisma.store.findUnique({
     where: { ownerId: user.id },
-  });
-
-  if (!store) return;
-
-  const order = await prisma.order.findFirst({
-    where: {
-      id: orderId,
-      storeId: store.id,
+    select: {
+      id: true,
     },
   });
 
-  if (!order) {
-    // Not this store's order or does not exist
-    return;
+  if (!store) {
+    return {
+      success: false,
+      error: "No store linked to this account.",
+    };
   }
 
-  // Only allow confirmation at the final step
-  if (
-    order.status !== "READY_FOR_COLLECTION" &&
-    order.status !== "OUT_FOR_DELIVERY"
-  ) {
-    return;
-  }
+  const code = rawCode.trim();
 
-  const code = rawCode;
-  if (order.pickupCode !== code) {
-    // Wrong code – ignore for now (no timing difference / error leak)
-    return;
-  }
+  const result = await prisma.$transaction(async (tx) => {
+    const order = await tx.order.findFirst({
+      where: {
+        id: orderId,
+        storeId: store.id,
+      },
+      select: {
+        id: true,
+        storeId: true,
+        status: true,
+        source: true,
+        pickupCode: true,
+        fulfilmentType: true,
+        paymentMethod: true,
+        completedAt: true,
+      },
+    });
 
-  await prisma.$transaction(async (tx) => {
-    const order = await tx.order.update({
-      where: { id: orderId },
+    if (!order) {
+      return {
+        success: false as const,
+        error: "Order not found for this store.",
+      };
+    }
+
+    if (order.source === "MANUAL") {
+      return {
+        success: false as const,
+        error:
+          "Manual orders do not require customer pickup code confirmation.",
+      };
+    }
+
+    const canConfirm =
+      order.status === "READY_FOR_COLLECTION" ||
+      order.status === "OUT_FOR_DELIVERY";
+
+    if (!canConfirm) {
+      return {
+        success: false as const,
+        error: "This order is not ready to be confirmed yet.",
+      };
+    }
+
+    if (order.pickupCode !== code) {
+      return {
+        success: false as const,
+        error: "Invalid confirmation code.",
+      };
+    }
+
+    const updatedOrder = await tx.order.update({
+      where: { id: order.id },
       data: {
         status: "COMPLETED",
-        completedAt: new Date(),
+        completedAt: order.completedAt ?? new Date(),
       },
       select: {
         id: true,
@@ -287,17 +372,26 @@ export async function confirmOrderWithCode(formData: FormData) {
       },
     });
 
-    if (
-      order.fulfilmentType === "COLLECTION" &&
-      order.paymentMethod === "CASH_ON_COLLECTION"
-    ) {
+    const shouldApplyLedger =
+      updatedOrder.paymentMethod === "CASH_ON_COLLECTION" ||
+      updatedOrder.paymentMethod === "CASH_ON_DELIVERY";
+
+    if (shouldApplyLedger) {
       await applyOrderPriceAdjustmentLedgerTx({
         tx,
-        orderId: order.id,
+        orderId: updatedOrder.id,
       });
     }
+
+    return {
+      success: true as const,
+      error: null,
+    };
   });
+
   revalidatePath("/owner/store/orders");
+
+  return result;
 }
 
 export async function completeDelivery(formData: FormData) {

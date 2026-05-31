@@ -96,8 +96,12 @@ function formatDateTime(d: Date) {
 
 function getLedgerTypeLabel(type: LedgerType) {
   switch (type) {
-    case "TOPUP":
-      return "Top-up";
+    case "ORDER_CREDIT":
+      return "Online order credit";
+    case "DISCOUNT_CREDIT":
+      return "Discount credit";
+    case "SETTLEMENT_PAYMENT":
+      return "Settlement payment";
     case "REFUND":
       return "Refund";
     case "FEE_DEBIT":
@@ -114,7 +118,12 @@ function getLedgerTypeLabel(type: LedgerType) {
 }
 
 function isCreditPositiveType(type: LedgerType) {
-  return type === "TOPUP" || type === "REFUND";
+  return (
+    type === "ORDER_CREDIT" ||
+    type === "DISCOUNT_CREDIT" ||
+    type === "SETTLEMENT_PAYMENT" ||
+    type === "REFUND"
+  );
 }
 
 export default async function OwnerOrdersPage({
@@ -159,9 +168,7 @@ export default async function OwnerOrdersPage({
   const sp = (await searchParams) ?? {};
 
   const sortParam: SortOption =
-    sp.sort === "time_asc" ||
-    sp.sort === "status" ||
-    sp.sort === "time_desc"
+    sp.sort === "time_asc" || sp.sort === "status" || sp.sort === "time_desc"
       ? (sp.sort as SortOption)
       : "time_desc";
 
@@ -186,7 +193,16 @@ export default async function OwnerOrdersPage({
 
   const where: Prisma.OrderWhereInput = {
     storeId: store.id,
+
     ...(rangeStart ? { createdAt: { gte: rangeStart } } : {}),
+
+    // Do not show unpaid online orders to the store owner.
+    // Online orders become visible once Yoco confirms payment and the webhook
+    // changes them from PENDING to ACCEPTED.
+    NOT: {
+      paymentMethod: "ONLINE_PAYMENT",
+      status: "PENDING",
+    },
   };
 
   const prismaOrderBy: Prisma.OrderOrderByWithRelationInput | undefined =
@@ -228,24 +244,26 @@ export default async function OwnerOrdersPage({
     );
   }
 
-  const mapped = filtered.map((order) => ({
-    id: order.id,
-    shortId: order.id.slice(-6),
-    createdAt: order.createdAt,
-    customerName: order.customerName,
-    totalCents: order.totalCents,
-    status: order.status,
-    estimatedReadyAt: order.estimatedReadyAt ?? undefined,
-    note: order.note,
-    fulfilmentType: order.fulfilmentType,
-    items: order.items.map((item) => ({
-      id: item.id,
-      name: item.name,
-      quantity: item.quantity,
-      unitCents: item.unitCents,
-      totalCents: item.totalCents,
-    })),
-  }));
+const mapped = filtered.map((order) => ({
+  id: order.id,
+  shortId: order.id.slice(-6),
+  createdAt: order.createdAt,
+  customerName: order.customerName,
+  totalCents: order.totalCents,
+  source: order.source,
+  paymentMethod: order.paymentMethod,
+  status: order.status,
+  estimatedReadyAt: order.estimatedReadyAt ?? undefined,
+  note: order.note,
+  fulfilmentType: order.fulfilmentType,
+  items: order.items.map((item) => ({
+    id: item.id,
+    name: item.name,
+    quantity: item.quantity,
+    unitCents: item.unitCents,
+    totalCents: item.totalCents,
+  })),
+}));
 
   const rangeLabel =
     rangeParam === "7d"
@@ -343,7 +361,7 @@ export default async function OwnerOrdersPage({
 
           <div className="rounded-4xl border border-black/10 bg-kasi-black p-5 text-white shadow-sm">
             <p className="text-xs font-black uppercase tracking-wide text-golden-yellow">
-              Store balance
+              Current week balance
             </p>
 
             <p
@@ -357,8 +375,10 @@ export default async function OwnerOrdersPage({
 
             <p className="mt-3 text-sm font-medium leading-6 text-white/65">
               {isNegativeBalance
-                ? "Your balance is negative. You’ll need to top up before opening your store."
-                : "Positive balance available for platform fees."}
+                ? "Your current week balance is negative. If it remains negative at settlement time, you’ll need to pay the amount due."
+                : currentBalance > 0
+                  ? "Kasi Flavors currently owes this amount to your store for the current week."
+                  : "Your current week balance is R0. There is nothing to settle right now."}
             </p>
 
             {isNegativeBalance && (
@@ -367,7 +387,7 @@ export default async function OwnerOrdersPage({
                   href="/owner/store/billing"
                   className="inline-flex rounded-full bg-street-orange px-4 py-2 text-xs font-black uppercase tracking-wide text-white transition hover:bg-kasi-green"
                 >
-                  View billing
+                  View settlement
                 </Link>
               </div>
             )}
@@ -400,8 +420,11 @@ export default async function OwnerOrdersPage({
               <div className="mt-4 space-y-2 md:hidden">
                 {ledgerEntries.map((entry) => {
                   const isPositive = isCreditPositiveType(entry.type);
-                  const sign =
-                    isPositive ? "+" : entry.type === "FEE_RESERVE" ? "" : "−";
+                  const sign = isPositive
+                    ? "+"
+                    : entry.type === "FEE_RESERVE"
+                      ? ""
+                      : "−";
 
                   return (
                     <article
@@ -474,18 +497,14 @@ export default async function OwnerOrdersPage({
                   <tbody>
                     {ledgerEntries.map((entry) => {
                       const isPositive = isCreditPositiveType(entry.type);
-                      const sign =
-                        isPositive
-                          ? "+"
-                          : entry.type === "FEE_RESERVE"
-                            ? ""
-                            : "−";
+                      const sign = isPositive
+                        ? "+"
+                        : entry.type === "FEE_RESERVE"
+                          ? ""
+                          : "−";
 
                       return (
-                        <tr
-                          key={entry.id}
-                          className="border-t border-black/10"
-                        >
+                        <tr key={entry.id} className="border-t border-black/10">
                           <td className="whitespace-nowrap py-2 pr-3 font-medium">
                             {formatDateTime(entry.createdAt)}
                           </td>

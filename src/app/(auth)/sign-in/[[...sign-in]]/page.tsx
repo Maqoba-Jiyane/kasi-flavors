@@ -4,31 +4,31 @@
 import { SignIn } from "@clerk/nextjs";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { Suspense, useMemo } from "react";
 
-export default function SignInPage() {
+function getSafeRedirectUrl(value: string | null) {
+  if (!value) return null;
+
+  // Keep redirects internal only. This prevents open redirect issues.
+  if (!value.startsWith("/")) return null;
+  if (value.startsWith("//")) return null;
+
+  return value;
+}
+
+function SignInPageContent() {
   const searchParams = useSearchParams();
 
-  const initialRedirect = useMemo(() => {
-    try {
-      const redirectUrl =
-        searchParams?.get("redirectUrl") || searchParams?.get("redirect_url");
+  const redirectUrl = useMemo(() => {
+    const rawRedirect =
+      searchParams.get("redirect_url") || searchParams.get("redirectUrl");
 
-      if (redirectUrl) return redirectUrl;
-
-      if (typeof window !== "undefined") {
-        const params = new URLSearchParams(window.location.search);
-
-        return params.get("redirectUrl") || params.get("redirect_url");
-      }
-
-      return null;
-    } catch {
-      return null;
-    }
+    return getSafeRedirectUrl(rawRedirect);
   }, [searchParams]);
 
-  const [redirectUrl] = useState<string | null>(initialRedirect);
+  const signUpUrl = redirectUrl
+    ? `/sign-up?redirect_url=${encodeURIComponent(redirectUrl)}`
+    : "/sign-up";
 
   return (
     <main className="min-h-screen bg-kasi-cream">
@@ -41,7 +41,7 @@ export default function SignInPage() {
           <div className="absolute left-1/2 top-1/3 h-56 w-56 rounded-full bg-golden-yellow blur-3xl" />
         </div>
 
-        <div className="relative  items-center justify-center grid w-full max-w-6xl gap-8 lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
+        <div className="relative grid w-full max-w-6xl items-center justify-center gap-8 lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
           <div className="text-white">
             <Link
               href="/"
@@ -79,8 +79,8 @@ export default function SignInPage() {
               <SignIn
                 appearance={{
                   elements: {
-                    rootBox: "",
-                    card: "border-0 bg-transparent p-0 shadow-none",
+                    rootBox: "w-full",
+                    card: "w-full border-0 bg-transparent p-0 shadow-none",
                     header: "hidden",
                     footer: "hidden",
                     socialButtonsBlockButton:
@@ -110,21 +110,15 @@ export default function SignInPage() {
                 }}
                 routing="path"
                 path="/sign-in"
-                signUpUrl="/sign-up"
-                redirectUrl={redirectUrl ?? undefined}
-                forceRedirectUrl={redirectUrl ?? undefined}
-                afterSignInUrl={redirectUrl ?? undefined}
+                signUpUrl={signUpUrl}
+                forceRedirectUrl={redirectUrl || "/"}
                 fallbackRedirectUrl="/"
               />
 
               <p className="mt-5 text-center text-xs font-medium leading-5 text-black/45">
                 New to Kasi Flavors?{" "}
                 <Link
-                  href={
-                    redirectUrl
-                      ? `/sign-up?redirectUrl=${encodeURIComponent(redirectUrl)}`
-                      : "/sign-up"
-                  }
+                  href={signUpUrl}
                   className="font-black text-kasi-green hover:text-street-orange"
                 >
                   Create an account
@@ -138,13 +132,10 @@ export default function SignInPage() {
   );
 }
 
-function MiniCard({ icon, title }: { icon: string; title: string }) {
+export default function SignInPage() {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
-      <p className="text-2xl">{icon}</p>
-      <p className="mt-2 text-xs font-black uppercase tracking-wide text-white/70">
-        {title}
-      </p>
-    </div>
+    <Suspense fallback={null}>
+      <SignInPageContent />
+    </Suspense>
   );
 }

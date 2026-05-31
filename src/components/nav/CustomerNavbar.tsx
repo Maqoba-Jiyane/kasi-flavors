@@ -1,15 +1,9 @@
 "use client";
 
-import {
-  SignedIn,
-  SignedOut,
-  SignInButton,
-  SignOutButton,
-  SignUpButton,
-} from "@clerk/nextjs";
+import { SignedIn, SignedOut, SignOutButton } from "@clerk/nextjs";
 import { LogIn, Menu, ShoppingCart, User, X } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
 export default function CustomerNavbar({
@@ -22,11 +16,30 @@ export default function CustomerNavbar({
   onSignOut?: () => void;
 }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
 
   if (pathname.startsWith("/owner") || pathname.startsWith("/admin")) {
     return null;
   }
+
+  const queryString = searchParams.toString();
+
+  const currentPath =
+    queryString.length > 0 ? `${pathname}?${queryString}` : pathname;
+
+  const redirectTarget =
+    pathname.startsWith("/sign-in") || pathname.startsWith("/sign-up")
+      ? "/"
+      : currentPath;
+
+  const signInHref = `/sign-in?redirect_url=${encodeURIComponent(
+    redirectTarget,
+  )}`;
+
+  const signUpHref = `/sign-up?redirect_url=${encodeURIComponent(
+    redirectTarget,
+  )}`;
 
   const navLinkClass = (active: boolean) =>
     `rounded-full px-4 py-2 text-sm font-extrabold transition ${
@@ -128,7 +141,7 @@ export default function CustomerNavbar({
 
               <SignedOut>
                 <Link
-                  href="/sign-in"
+                  href={signInHref}
                   className="inline-flex items-center gap-2 rounded-full border-2 border-black/10 bg-white px-4 py-2.5 text-sm font-black text-kasi-black transition hover:border-kasi-green hover:text-kasi-green"
                 >
                   <LogIn className="h-4 w-4" />
@@ -136,7 +149,7 @@ export default function CustomerNavbar({
                 </Link>
 
                 <Link
-                  href="/sign-up"
+                  href={signUpHref}
                   className="inline-flex items-center gap-2 rounded-full bg-kasi-green px-4 py-2.5 text-sm font-black text-white transition hover:bg-street-orange"
                 >
                   <User className="h-4 w-4" />
@@ -189,6 +202,7 @@ export default function CustomerNavbar({
                 <p className="text-sm font-black uppercase tracking-wide text-golden-yellow">
                   Skip the queue
                 </p>
+
                 <p className="mt-1 text-sm text-white/70">
                   Order from local kasi food spots and collect when ready.
                 </p>
@@ -204,17 +218,21 @@ export default function CustomerNavbar({
 
                   <SignedOut>
                     <div className="grid gap-2">
-                      <SignInButton>
-                        <button className="w-full rounded-full bg-white px-4 py-3 text-sm font-black text-kasi-black">
-                          Sign in
-                        </button>
-                      </SignInButton>
+                      <Link
+                        href={signInHref}
+                        onClick={() => setOpen(false)}
+                        className="block w-full rounded-full bg-white px-4 py-3 text-center text-sm font-black text-kasi-black"
+                      >
+                        Sign in
+                      </Link>
 
-                      <SignUpButton>
-                        <button className="w-full rounded-full bg-kasi-green px-4 py-3 text-sm font-black text-white">
-                          Sign up
-                        </button>
-                      </SignUpButton>
+                      <Link
+                        href={signUpHref}
+                        onClick={() => setOpen(false)}
+                        className="block w-full rounded-full bg-kasi-green px-4 py-3 text-center text-sm font-black text-white"
+                      >
+                        Sign up
+                      </Link>
                     </div>
                   </SignedOut>
                 </div>

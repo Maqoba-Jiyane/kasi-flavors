@@ -2,83 +2,91 @@
 
 import { prisma } from "@/lib/prisma";
 import { createTopupSession } from "@/lib/billing/payments";
-import { getRequiredTopupCents } from "@/lib/billing/topUp"; // keep as-is if your file is named topUp.ts
+import { getRequiredSettlementPaymentCents } from "@/lib/billing/settlement";
 import { assertRole, getCurrentUser } from "@/lib/auth";
 
-/**
- * Server action for starting a topup checkout for the current store owner.
- */
-export async function createTopupCheckoutSession(amountCents: number) {
+export async function createSettlementPaymentSession(amountCents: number) {
   const user = await getCurrentUser();
+
   if (!user) {
     throw new Error("Not authenticated.");
   }
 
-  // Ensure only store owners can top up
   assertRole(user, ["STORE_OWNER"]);
 
-  // Load the store for this owner
   const store = await prisma.store.findFirst({
     where: { ownerId: user.id },
+    select: {
+      id: true,
+      creditCents: true,
+    },
   });
 
   if (!store) {
     throw new Error("Store not found for current user.");
   }
 
-  // Basic amount validation
   if (!Number.isInteger(amountCents) || amountCents <= 0) {
-    throw new Error("Invalid topup amount.");
+    throw new Error("Invalid settlement payment amount.");
   }
 
   const currentBalanceCents = store.creditCents ?? 0;
-  const minCents = getRequiredTopupCents(currentBalanceCents);
+  const requiredAmountCents =
+    getRequiredSettlementPaymentCents(currentBalanceCents);
 
-  if (amountCents < minCents) {
-    throw new Error("Topup amount is below the required minimum.");
+  if (requiredAmountCents <= 0) {
+    throw new Error("No settlement payment is required right now.");
   }
 
-  const baseUrl = process.env.BASE_URL;
+  if (amountCents !== requiredAmountCents) {
+    throw new Error("Settlement payment amount must match the required amount.");
+  }
+
+  const baseUrl =
+    process.env.APP_URL ||
+    process.env.BASE_URL ||
+    process.env.NEXT_PUBLIC_APP_URL;
+
   if (!baseUrl) {
-    throw new Error("BASE_URL is not configured.");
+    throw new Error("APP_URL or BASE_URL is not configured.");
   }
 
-  // 1) Create ledger entry for this topup so we can reconcile via webhook
-  const topup = await prisma.ledgerEntry.create({
+  const cleanBaseUrl = baseUrl.replace(/\/$/, "");
+
+  const settlementPayment = await prisma.ledgerEntry.create({
     data: {
       storeId: store.id,
       amountCents,
-      status: "PENDING", // PENDING | COMPLETED | FAILED
-      type: "TOPUP",
-      note: "Store topup via Yoco",
-      // provider / checkoutId will be attached after we get them from Yoco
+      status: "PENDING",
+      type: "SETTLEMENT_PAYMENT",
+      balanceCents: currentBalanceCents,
+      note: "Store settlement payment via Yoco.",
     },
   });
 
-  const successUrl = `${baseUrl}/owner/store/orders?topupId=${topup.id}`;
-  const cancelUrl = `${baseUrl}/owner/store/billing/topup?topupId=${topup.id}`;
+  const successUrl = `${cleanBaseUrl}/owner/store/billing?settlementPaymentId=${settlementPayment.id}`;
+  const cancelUrl = `${cleanBaseUrl}/owner/store/billing?settlementPaymentId=${settlementPayment.id}&cancelled=1`;
 
-  // 2) Create Yoco checkout session -> gives us checkoutId + redirectUrl
   const session = await createTopupSession({
     amountCents,
     currency: "ZAR",
     successUrl,
     cancelUrl,
-    externalId: topup.id, // optional, helps reconcile via Yoco if they send it back
+    externalId: settlementPayment.id,
     metadata: {
-      topupId: topup.id,
+      topupId: settlementPayment.id,
+      settlementPaymentId: settlementPayment.id,
       storeId: store.id,
       ownerId: user.id,
-      type: "store_topup",
+      type: "settlement_payment",
     },
   });
 
-  // 3) Store the provider + checkout id so webhooks can match this entry later
   await prisma.ledgerEntry.update({
-    where: { id: topup.id },
+    where: { id: settlementPayment.id },
     data: {
-      provider: "YOCO",           // make sure your schema has this field
-      checkoutId: session.checkoutId, // and this one
+      provider: "YOCO",
+      checkoutId: session.checkoutId,
     },
   });
 
