@@ -164,6 +164,13 @@ export async function updateOrderStatus(formData: FormData) {
     };
   }
 
+  if (order.paymentMethod === "ONLINE_PAYMENT" && order.status === "PENDING") {
+    return {
+      success: false,
+      error: "This online payment order has not been paid yet.",
+    };
+  }
+
   const previousStatus = order.status;
 
   const allowedNext = ALLOWED_TRANSITIONS[previousStatus] || [];
@@ -193,27 +200,28 @@ export async function updateOrderStatus(formData: FormData) {
     };
   }
 
-await prisma.$transaction(async (tx) => {
-  const updatedOrder = await tx.order.update({
-    where: { id: order.id },
-    data: {
-      status: nextStatus,
-      completedAt: nextStatus === "COMPLETED" ? new Date() : order.completedAt,
-    },
-    select: {
-      id: true,
-      status: true,
-      paymentMethod: true,
-    },
-  });
-
-  if (updatedOrder.status === "COMPLETED") {
-    await applyOrderPriceAdjustmentLedgerTx({
-      tx,
-      orderId: updatedOrder.id,
+  await prisma.$transaction(async (tx) => {
+    const updatedOrder = await tx.order.update({
+      where: { id: order.id },
+      data: {
+        status: nextStatus,
+        completedAt:
+          nextStatus === "COMPLETED" ? new Date() : order.completedAt,
+      },
+      select: {
+        id: true,
+        status: true,
+        paymentMethod: true,
+      },
     });
-  }
-});
+
+    if (updatedOrder.status === "COMPLETED") {
+      await applyOrderPriceAdjustmentLedgerTx({
+        tx,
+        orderId: updatedOrder.id,
+      });
+    }
+  });
 
   const becameReadyForCollection =
     nextStatus === "READY_FOR_COLLECTION" &&
@@ -241,26 +249,26 @@ await prisma.$transaction(async (tx) => {
     }
   }
 
-  const shouldSendReadyWhatsApp =
-    (becameReadyForCollection || becameOutForDelivery) && !!order.customerPhone;
+  // const shouldSendReadyWhatsApp =
+  //   (becameReadyForCollection || becameOutForDelivery) && !!order.customerPhone;
 
-  if (shouldSendReadyWhatsApp) {
-    try {
-      await enqueueOrderReadyWhatsApp({
-        to: order.customerPhone!,
-        customerName: order.customerName || "there",
-        fulfilmentType: order.fulfilmentType,
-        orderId: order.id,
-        pickupCode: order.pickupCode,
-        storeName: order.store.name,
-        status: becameOutForDelivery
-          ? "OUT_FOR_DELIVERY"
-          : "READY_FOR_COLLECTION",
-      });
-    } catch (err) {
-      console.error("Failed to enqueue order ready WhatsApp", err);
-    }
-  }
+  // if (shouldSendReadyWhatsApp) {
+  //   try {
+  //     await enqueueOrderReadyWhatsApp({
+  //       to: order.customerPhone!,
+  //       customerName: order.customerName || "there",
+  //       fulfilmentType: order.fulfilmentType,
+  //       orderId: order.id,
+  //       pickupCode: order.pickupCode,
+  //       storeName: order.store.name,
+  //       status: becameOutForDelivery
+  //         ? "OUT_FOR_DELIVERY"
+  //         : "READY_FOR_COLLECTION",
+  //     });
+  //   } catch (err) {
+  //     console.error("Failed to enqueue order ready WhatsApp", err);
+  //   }
+  // }
 
   revalidatePath("/owner/store/orders");
 

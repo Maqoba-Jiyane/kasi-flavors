@@ -4,53 +4,49 @@ import * as React from "react";
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { formatMoney } from "@/lib/money";
-import { getRequiredTopupCents } from "@/lib/billing/topUp";
-import { createTopupCheckoutSession } from "./actions";
+import { getRequiredSettlementPaymentCents } from "@/lib/billing/settlement";
+import { createSettlementPaymentSession } from "./actions";
 
 type Props = {
   currentBalanceCents: number;
-  requiredTopupCents: number;
+  requiredSettlementPaymentCents: number;
 };
 
-export function OwnerTopupCheckout({
+export function OwnerSettlementPaymentCheckout({
   currentBalanceCents,
-  requiredTopupCents,
+  requiredSettlementPaymentCents,
 }: Props) {
   const router = useRouter();
 
-  const [amountInput, setAmountInput] = React.useState(
-    (requiredTopupCents / 100).toFixed(2)
-  );
+  const amountInput = (requiredSettlementPaymentCents / 100).toFixed(2);
 
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (submitting) return;
+
     setError(null);
 
-    const raw = amountInput.replace(",", ".");
-    const parsed = Number(raw);
+    const amountCents = requiredSettlementPaymentCents;
+    const minCents = getRequiredSettlementPaymentCents(currentBalanceCents);
 
-    if (!Number.isFinite(parsed) || parsed <= 0) {
-      setError("Please enter a valid amount.");
+    if (amountCents <= 0) {
+      setError("There is no settlement payment required right now.");
       return;
     }
 
-    const amountCents = Math.round(parsed * 100);
-    const minCents = getRequiredTopupCents(currentBalanceCents);
-
     if (amountCents < minCents) {
-      setError(
-        `Minimum top up is ${formatMoney(minCents)}. Please increase the amount.`
-      );
+      setError(`Settlement amount due is ${formatMoney(minCents)}.`);
       return;
     }
 
     try {
       setSubmitting(true);
 
-      const result = await createTopupCheckoutSession(amountCents);
+      const result = await createSettlementPaymentSession(amountCents);
 
       if (result?.redirectUrl) {
         router.push(result.redirectUrl);
@@ -73,7 +69,7 @@ export function OwnerTopupCheckout({
     <form onSubmit={onSubmit} className="mt-6 space-y-5">
       <div>
         <label className="mb-1.5 block text-xs font-black uppercase tracking-wide text-black/55">
-          Top up amount ZAR
+          Settlement amount ZAR
         </label>
 
         <div className="flex items-center gap-2">
@@ -84,17 +80,17 @@ export function OwnerTopupCheckout({
           <input
             type="number"
             step="0.01"
-            min={requiredTopupCents / 100}
+            min={requiredSettlementPaymentCents / 100}
             value={amountInput}
-            onChange={(e) => setAmountInput(e.target.value)}
-            className="h-12 flex-1 rounded-2xl border-2 border-black/10 bg-kasi-cream px-4 text-sm font-black text-kasi-black outline-none transition placeholder:text-black/35 focus:border-kasi-green focus:bg-white focus:ring-4 focus:ring-kasi-green/10"
+            readOnly
+            className="h-12 flex-1 rounded-2xl border-2 border-black/10 bg-kasi-cream px-4 text-sm font-black text-kasi-black outline-none"
           />
         </div>
 
         <p className="mt-2 text-xs font-medium text-black/55">
-          Minimum top up:{" "}
+          Amount due:{" "}
           <span className="font-black text-kasi-black">
-            {formatMoney(requiredTopupCents)}
+            {formatMoney(requiredSettlementPaymentCents)}
           </span>
           .
         </p>
@@ -106,20 +102,20 @@ export function OwnerTopupCheckout({
         </div>
       )}
 
-      <div className="rounded-[1.5rem] bg-kasi-cream p-4">
+      <div className="rounded-3xl bg-kasi-cream p-4">
         <p className="text-xs font-black uppercase tracking-wide text-kasi-black">
           Before you continue
         </p>
 
         <p className="mt-1 text-xs font-medium leading-5 text-black/60">
           You will be redirected to the payment checkout page. Once payment is
-          confirmed, your store balance should update.
+          confirmed, your outstanding balance will be settled.
         </p>
       </div>
 
       <button
         type="submit"
-        disabled={submitting}
+        disabled={submitting || requiredSettlementPaymentCents <= 0}
         className="inline-flex w-full items-center justify-center rounded-full bg-kasi-green px-5 py-4 text-sm font-black text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-street-orange disabled:cursor-not-allowed disabled:opacity-60"
       >
         {submitting ? (
@@ -128,7 +124,7 @@ export function OwnerTopupCheckout({
             Starting checkout...
           </>
         ) : (
-          "Proceed to payment"
+          "Pay settlement"
         )}
       </button>
     </form>

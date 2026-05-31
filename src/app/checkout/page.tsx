@@ -228,6 +228,7 @@ export default async function CheckoutPage({
               deliveryFeeCents={store.deliveryFeeCents ?? undefined}
               deliveryRadiusKm={store.deliveryRadiusKm ?? undefined}
               onlinePaymentsEnabled={store.onlinePaymentsEnabled}
+              cashOnCollectionEnabled={store.cashOnCollectionEnabled}
               supportsDelivery={store.supportsDelivery}
             />
           </section>

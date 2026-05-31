@@ -20,7 +20,7 @@ export async function POST(req: Request) {
     if (!user) {
       return NextResponse.json(
         { success: false, error: "Not authenticated" },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
@@ -38,26 +38,41 @@ export async function POST(req: Request) {
       (form.get("fulfilmentType") as string) === "DELIVERY"
         ? "DELIVERY"
         : "COLLECTION";
-    const useMyLocation = ((form.get("useMyLocation") as string) || "false") === "true";
+    const useMyLocation =
+      ((form.get("useMyLocation") as string) || "false") === "true";
     const latRaw = ((form.get("latitude") as string) || "").trim();
     const lngRaw = ((form.get("longitude") as string) || "").trim();
     const deliveryLat = latRaw ? Number.parseFloat(latRaw) : null;
     const deliveryLng = lngRaw ? Number.parseFloat(lngRaw) : null;
     const note = ((form.get("note") as string) || "").trim();
+
+    const requestedPaymentMethod = String(form.get("paymentMethod") || "");
+
     const paymentMethod =
-      (form.get("paymentMethod") as string) === "ONLINE_PAYMENT"
-        ? "ONLINE_PAYMENT"
-        : "CASH_ON_DELIVERY";
+      requestedPaymentMethod === "CASH_ON_COLLECTION"
+        ? "CASH_ON_COLLECTION"
+        : requestedPaymentMethod === "CASH_ON_DELIVERY"
+          ? "CASH_ON_DELIVERY"
+          : "ONLINE_PAYMENT";
 
     // Extract delivery address fields (or lat/lng if user opted to use location)
     let deliveryAddress: string | null = null;
     if (fulfilmentType === "DELIVERY") {
       if (useMyLocation) {
         // Require lat/lng when using location
-        if (deliveryLat == null || deliveryLng == null || Number.isNaN(deliveryLat) || Number.isNaN(deliveryLng)) {
+        if (
+          deliveryLat == null ||
+          deliveryLng == null ||
+          Number.isNaN(deliveryLat) ||
+          Number.isNaN(deliveryLng)
+        ) {
           return NextResponse.json(
-            { success: false, error: "Unable to determine your location. Please enter an address or try again." },
-            { status: 400 }
+            {
+              success: false,
+              error:
+                "Unable to determine your location. Please enter an address or try again.",
+            },
+            { status: 400 },
           );
         }
       } else {
@@ -68,7 +83,7 @@ export async function POST(req: Request) {
         if (!address) {
           return NextResponse.json(
             { success: false, error: "Please provide a delivery address." },
-            { status: 400 }
+            { status: 400 },
           );
         }
 
@@ -88,28 +103,28 @@ export async function POST(req: Request) {
     if (!fullName || fullName.length > 200) {
       return NextResponse.json(
         { success: false, error: "Please provide a valid full name." },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (!email || email.length > 320) {
       return NextResponse.json(
         { success: false, error: "Please provide a valid email address." },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (phone && phone.length > 12) {
       return NextResponse.json(
         { success: false, error: "Please provide a valid phone number." },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (note && note.length > 1000) {
       return NextResponse.json(
         { success: false, error: "Note is too long." },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -119,7 +134,7 @@ export async function POST(req: Request) {
     if (!cart.items.length || !cart.storeId) {
       return NextResponse.json(
         { success: false, error: "Your cart is empty." },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -135,13 +150,72 @@ export async function POST(req: Request) {
         deliveryFeeCents: true,
         lat: true,
         lng: true,
+        onlinePaymentsEnabled: true,
+        cashOnCollectionEnabled: true,
+        supportsDelivery: true,
       },
     });
 
     if (!store) {
       return NextResponse.json(
         { success: false, error: "Store not found." },
-        { status: 400 }
+        { status: 400 },
+      );
+    }
+    if (paymentMethod === "ONLINE_PAYMENT" && !store.onlinePaymentsEnabled) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Online payments are not available for this store.",
+        },
+        { status: 400 },
+      );
+    }
+
+    if (
+      paymentMethod === "CASH_ON_COLLECTION" &&
+      fulfilmentType !== "COLLECTION"
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Cash on collection is only available for collection orders.",
+        },
+        { status: 400 },
+      );
+    }
+
+    if (
+      paymentMethod === "CASH_ON_COLLECTION" &&
+      !store.cashOnCollectionEnabled
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Cash on collection is not available for this store.",
+        },
+        { status: 400 },
+      );
+    }
+
+    // Block delivery cash for now unless you intentionally want to support it.
+    if (paymentMethod === "CASH_ON_DELIVERY") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Cash on delivery is not available yet.",
+        },
+        { status: 400 },
+      );
+    }
+
+    if (fulfilmentType === "DELIVERY" && !store.supportsDelivery) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "This store does not offer delivery.",
+        },
+        { status: 400 },
       );
     }
 
@@ -156,7 +230,7 @@ export async function POST(req: Request) {
       if (!store.deliveryRadiusKm) {
         return NextResponse.json(
           { success: false, error: "This store does not offer delivery." },
-          { status: 400 }
+          { status: 400 },
         );
       }
 
@@ -165,18 +239,24 @@ export async function POST(req: Request) {
         return NextResponse.json(
           {
             success: false,
-            error: "Please use 'Use my location' to verify you are within the delivery radius.",
+            error:
+              "Please use 'Use my location' to verify you are within the delivery radius.",
           },
-          { status: 400 }
+          { status: 400 },
         );
       }
 
       // Calculate distance from store to delivery address
-      if (deliveryLat !== null && deliveryLng !== null && store.lat && store.lng) {
+      if (
+        deliveryLat !== null &&
+        deliveryLng !== null &&
+        store.lat &&
+        store.lng
+      ) {
         const { haversineKm } = await import("@/lib/geo");
         const distanceKm = haversineKm(
           { lat: store.lat, lng: store.lng },
-          { lat: deliveryLat, lng: deliveryLng }
+          { lat: deliveryLat, lng: deliveryLng },
         );
 
         if (distanceKm > store.deliveryRadiusKm) {
@@ -185,7 +265,7 @@ export async function POST(req: Request) {
               success: false,
               error: `Your delivery address is ${distanceKm.toFixed(1)}km away. This store only delivers within ${store.deliveryRadiusKm}km. Please choose a closer store or select collection.`,
             },
-            { status: 400 }
+            { status: 400 },
           );
         }
       }
@@ -335,7 +415,7 @@ export async function POST(req: Request) {
         // Store the checkout ID on the order for webhook reconciliation
         await prisma.order.update({
           where: { id: order.id },
-          data: { 
+          data: {
             checkoutId: session.checkoutId,
           },
         });
@@ -349,8 +429,11 @@ export async function POST(req: Request) {
         // If payment session creation fails, delete the order and return error
         await prisma.order.delete({ where: { id: order.id } });
         return NextResponse.json(
-          { success: false, error: "Failed to initiate payment. Please try again." },
-          { status: 500 }
+          {
+            success: false,
+            error: "Failed to initiate payment. Please try again.",
+          },
+          { status: 500 },
         );
       }
     }
@@ -360,28 +443,35 @@ export async function POST(req: Request) {
 
     // 7) Enqueue confirmation email (unchanged)
     try {
-      await enqueueOrderConfirmationEmail({
+      const queued = await enqueueOrderConfirmationEmail({
         tenantId: order.storeId,
         orderId: order.id,
         userId: user.id,
       });
+
+      if (process.env.NODE_ENV !== "production") {
+        console.info("[orders] confirmation email queued", {
+          orderId: order.id,
+          messageId: queued.messageId,
+        });
+      }
     } catch (err) {
       console.error("[orders] Failed to enqueue confirmation email", err);
     }
 
     // 8) WhatsApp order confirmation (best effort)
-    try {
-      // You can await this, or fire-and-forget with `.catch(...)`
-      await enqueueOrderConfirmationWhatsApp({
-        orderId: order.id,
-        userId: user.id,
-      });
-    } catch (err) {
-      console.error(
-        "[orders] Failed to enqueue WhatsApp order confirmation",
-        err
-      );
-    }
+    // try {
+    //   // You can await this, or fire-and-forget with `.catch(...)`
+    //   await enqueueOrderConfirmationWhatsApp({
+    //     orderId: order.id,
+    //     userId: user.id,
+    //   });
+    // } catch (err) {
+    //   console.error(
+    //     "[orders] Failed to enqueue WhatsApp order confirmation",
+    //     err
+    //   );
+    // }
 
     return NextResponse.json({
       success: true,
@@ -392,7 +482,7 @@ export async function POST(req: Request) {
     console.error("Place order failed:", err);
     return NextResponse.json(
       { success: false, error: GENERIC_ERROR_MESSAGE },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -403,7 +493,7 @@ export async function GET() {
   if (!user) {
     return NextResponse.json(
       { success: false, cart: [], error: "Not authenticated" },
-      { status: 401 }
+      { status: 401 },
     );
   }
 

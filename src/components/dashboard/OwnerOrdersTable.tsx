@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useState, useTransition } from "react";
-import { OrderStatus } from "@prisma/client";
+import { OrderStatus, PaymentMethod } from "@prisma/client";
 import { StatusBadge } from "./StatusBadge";
 import {
   updateOrderStatus,
@@ -25,6 +25,7 @@ type OwnerOrderRow = {
   totalCents: number;
   status: OrderStatus;
   source: "CUSTOMER" | "MANUAL";
+  paymentMethod: PaymentMethod;
   estimatedReadyAt?: Date | null;
   note?: string | null;
   items: OwnerOrderItem[];
@@ -51,6 +52,32 @@ function formatDate(d: Date) {
     day: "2-digit",
     month: "short",
   });
+}
+
+function paymentMethodLabel(paymentMethod: OwnerOrderRow["paymentMethod"]) {
+  switch (paymentMethod) {
+    case "ONLINE_PAYMENT":
+      return "Paid online";
+    case "CASH_ON_COLLECTION":
+      return "Cash on collection";
+    case "CASH_ON_DELIVERY":
+      return "Cash on delivery";
+    default:
+      return "Payment";
+  }
+}
+
+function paymentMethodClass(paymentMethod: OwnerOrderRow["paymentMethod"]) {
+  switch (paymentMethod) {
+    case "ONLINE_PAYMENT":
+      return "bg-kasi-green/10 text-kasi-green";
+    case "CASH_ON_COLLECTION":
+      return "bg-golden-yellow/30 text-kasi-black";
+    case "CASH_ON_DELIVERY":
+      return "bg-street-orange/10 text-street-orange";
+    default:
+      return "bg-black/10 text-black/60";
+  }
 }
 
 function humanizeStatus(status: OrderStatus) {
@@ -281,6 +308,15 @@ export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
                       Collection
                     </span>
 
+                    <span
+                      className={[
+                        "inline-flex rounded-full px-3 py-1",
+                        paymentMethodClass(order.paymentMethod),
+                      ].join(" ")}
+                    >
+                      {paymentMethodLabel(order.paymentMethod)}
+                    </span>
+
                     {order.estimatedReadyAt && (
                       <span className="inline-flex rounded-full bg-kasi-green/10 px-3 py-1 text-kasi-green">
                         ETA: {formatTime(order.estimatedReadyAt)}
@@ -341,6 +377,9 @@ export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
                   Total
                 </th>
                 <th className="px-4 py-4 text-left text-xs font-black uppercase tracking-wide text-white/70">
+                  Payment
+                </th>
+                <th className="px-4 py-4 text-left text-xs font-black uppercase tracking-wide text-white/70">
                   ETA
                 </th>
                 <th className="px-4 py-4 text-left text-xs font-black uppercase tracking-wide text-white/70">
@@ -356,7 +395,7 @@ export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
               {!hasOrders && (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="px-4 py-8 text-center text-sm font-bold text-black/55"
                   >
                     No orders to show for the current filters.
@@ -405,6 +444,17 @@ export function OwnerOrdersTable({ orders }: OwnerOrdersTableProps) {
                     <td className="whitespace-nowrap px-4 py-4 align-middle">
                       <span className="rounded-full bg-golden-yellow px-3 py-1.5 text-xs font-black text-kasi-black">
                         {formatPrice(order.totalCents)}
+                      </span>
+                    </td>
+
+                    <td className="whitespace-nowrap px-4 py-4 align-middle">
+                      <span
+                        className={[
+                          "inline-flex rounded-full px-3 py-1.5 text-xs font-black",
+                          paymentMethodClass(order.paymentMethod),
+                        ].join(" ")}
+                      >
+                        {paymentMethodLabel(order.paymentMethod)}
                       </span>
                     </td>
 

@@ -19,14 +19,43 @@ type PrismaTx = Prisma.TransactionClient;
 
 function getLedgerDelta(type: LedgerType, amountCents: number) {
   switch (type) {
-    case "TOPUP":
+    /**
+     * Positive movement:
+     * These increase the store's current weekly balance.
+     *
+     * ORDER_CREDIT:
+     * Kasi Flavors received an online payment and now owes the store.
+     *
+     * TOPUP:
+     * Store paid Kasi Flavors to settle a negative balance.
+     *
+     * REFUND / DISCOUNT_CREDIT:
+     * Store is being credited.
+     */
+    case "ORDER_CREDIT":
+    case "SETTLEMENT_PAYMENT":
     case "REFUND":
+    case "DISCOUNT_CREDIT":
       return amountCents;
 
+    /**
+     * Negative movement:
+     * These reduce the store's current weekly balance.
+     *
+     * FEE_DEBIT:
+     * Store owes platform fees.
+     *
+     * PAYOUT:
+     * Kasi Flavors paid the store, so the balance reduces.
+     */
     case "FEE_DEBIT":
     case "PAYOUT":
       return -amountCents;
 
+    /**
+     * Informational only.
+     * Does not affect current balance.
+     */
     case "FEE_RESERVE":
       return 0;
 
@@ -65,7 +94,9 @@ export async function applyLedgerEntryTx(
 
   const store = await tx.store.findUnique({
     where: { id: storeId },
-    select: { creditCents: true },
+    select: {
+      creditCents: true,
+    },
   });
 
   if (!store) {

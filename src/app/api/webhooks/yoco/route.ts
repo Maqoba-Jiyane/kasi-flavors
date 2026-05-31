@@ -4,6 +4,8 @@ import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { LedgerStatus, LedgerType } from "@prisma/client";
 import { applyOrderPriceAdjustmentLedgerTx } from "@/lib/orders/order-adjustments";
+import { clearCartForUser } from "@/lib/cart";
+import { applyLedgerEntryTx } from "@/lib/ledger";
 
 export const runtime = "nodejs";
 
@@ -84,6 +86,7 @@ export async function POST(req: NextRequest) {
       payload?: {
         id?: string; // payment/checkout id from Yoco
         metadata?: {
+          checkoutId?: string;
           topupId?: string;
           storeId?: string;
           ownerId?: string;
@@ -93,8 +96,14 @@ export async function POST(req: NextRequest) {
       };
     };
 
+    console.log("[Yoco webhook] received event", {
+      eventType: body.type,
+      payload: body.payload,
+      metadata: body.payload?.metadata,
+    });
+
     const eventType = body.type ?? "";
-    const checkoutIdFromPayload = body.payload?.id ?? null;
+    const checkoutIdFromPayload = body.payload?.metadata?.checkoutId ?? null;
     const metadata = body.payload?.metadata ?? {};
     const topupIdFromMetadata = metadata.topupId ?? null;
     const orderIdFromMetadata = metadata.orderId ?? null;
@@ -122,7 +131,15 @@ export async function POST(req: NextRequest) {
       // Handle order payment
       order = await prisma.order.findUnique({
         where: { id: orderIdFromMetadata },
-        include: { store: true },
+        select: {
+          id: true,
+          storeId: true,
+          customerId: true,
+          checkoutId: true,
+          status: true,
+          totalCents: true,
+          platformFeePaid: true,
+        },
       });
 
       if (!order) {
@@ -152,7 +169,7 @@ export async function POST(req: NextRequest) {
         entry = await prisma.ledgerEntry.findFirst({
           where: {
             checkoutId: checkoutIdFromPayload,
-            type: LedgerType.TOPUP,
+            type: LedgerType.SETTLEMENT_PAYMENT,
           },
           include: { store: true },
         });
@@ -170,10 +187,11 @@ export async function POST(req: NextRequest) {
     }
 
     // 7) Idempotency: if already COMPLETED, do nothing
-    if (
-      (entry && entry.status === LedgerStatus.COMPLETED) ||
-      (order && order.status !== "PENDING")
-    ) {
+    if (entry && entry.status === LedgerStatus.COMPLETED) {
+      return new Response("OK", { status: 200 });
+    }
+
+    if (order && order.platformFeePaid) {
       return new Response("OK", { status: 200 });
     }
 
@@ -182,39 +200,80 @@ export async function POST(req: NextRequest) {
       if (order) {
         // Order payment successful: mark order as paid and proceed with confirmation
         // For now, just mark as accepted (assuming payment means it's ready to be processed)
-        await prisma.$transaction(async (tx) => {
-          await tx.order.update({
-            where: { id: order.id },
-            data: {
-              status: "ACCEPTED",
-            },
-          });
+        await prisma.$transaction(
+          async (tx) => {
+            const currentOrder = await tx.order.findUnique({
+              where: { id: order.id },
+              select: {
+                id: true,
+                storeId: true,
+                status: true,
+                totalCents: true,
+                platformFeePaid: true,
+              },
+            });
 
-          await applyOrderPriceAdjustmentLedgerTx({
-            tx,
-            orderId: order.id,
-          });
-        });
+            if (!currentOrder) return;
+
+            if (currentOrder.platformFeePaid) return;
+
+            await applyLedgerEntryTx(tx, {
+              storeId: currentOrder.storeId,
+              type: "ORDER_CREDIT",
+              amountCents: currentOrder.totalCents,
+              orderId: currentOrder.id,
+              note: "Online order payment received.",
+            });
+
+            await applyOrderPriceAdjustmentLedgerTx({
+              tx,
+              orderId: currentOrder.id,
+            });
+
+            await tx.order.update({
+              where: { id: currentOrder.id },
+              data: {
+                status:
+                  currentOrder.status === "PENDING"
+                    ? "ACCEPTED"
+                    : currentOrder.status,
+              },
+            });
+          },
+          {
+            maxWait: 10_000,
+            timeout: 20_000,
+          },
+        );
 
         // TODO: Trigger order confirmation emails/WhatsApp here
         // Since the order was already created, we can enqueue confirmations now
         try {
           const { enqueueOrderConfirmationEmail } =
             await import("@/lib/queues/emailQueue");
-          const { enqueueOrderConfirmationWhatsApp } =
-            await import("@/lib/queues/whatsappQueue");
-          const { clearCartForUser } = await import("@/lib/cart");
+          // const { enqueueOrderConfirmationWhatsApp } =
+          //   await import("@/lib/queues/whatsappQueue");
+          // const { clearCartForUser } = await import("@/lib/cart");
 
-          await enqueueOrderConfirmationEmail({
-            tenantId: order.storeId,
-            orderId: order.id,
-            userId: order.customerId ? order.customerId : order.storeId,
-          });
+          if (order.customerId) {
+            await enqueueOrderConfirmationEmail({
+              tenantId: order.storeId,
+              orderId: order.id,
+              userId: order.customerId,
+            });
 
-          await enqueueOrderConfirmationWhatsApp({
-            orderId: order.id,
-            userId: order.customerId ? order.customerId : order.storeId,
-          });
+            // await enqueueOrderConfirmationWhatsApp({
+            //   orderId: order.id,
+            //   userId: order.customerId,
+            // });
+
+            await clearCartForUser(order.customerId);
+          }
+
+          // await enqueueOrderConfirmationWhatsApp({
+          //   orderId: order.id,
+          //   userId: order.customerId ? order.customerId : order.storeId,
+          // });
 
           // Clear the cart now that payment succeeded
           if (order.customerId) {

@@ -18,6 +18,23 @@ function calculateOrderAdjustmentCents(items: OrderItemForAdjustment[]) {
   }, 0);
 }
 
+/**
+ * Applies the platform price adjustment for an order.
+ *
+ * Meaning:
+ * - unitCents > baseUnitCents:
+ *   Customer paid more than the store base price.
+ *   Platform keeps the difference.
+ *   Ledger: FEE_DEBIT
+ *
+ * - unitCents < baseUnitCents:
+ *   Customer paid less than the store base price.
+ *   Platform credits the store for the difference.
+ *   Ledger: DISCOUNT_CREDIT
+ *
+ * - unitCents === baseUnitCents:
+ *   No platform adjustment.
+ */
 export async function applyOrderPriceAdjustmentLedgerTx({
   tx,
   orderId,
@@ -69,7 +86,7 @@ export async function applyOrderPriceAdjustmentLedgerTx({
       type: "FEE_DEBIT",
       amountCents: adjustmentCents,
       orderId: order.id,
-      note: "Platform price adjustment fee charged on completed order.",
+      note: "Platform price adjustment fee charged on order.",
     });
 
     await tx.order.update({
@@ -87,10 +104,10 @@ export async function applyOrderPriceAdjustmentLedgerTx({
 
   const entry = await applyLedgerEntryTx(tx, {
     storeId: order.storeId,
-    type: "REFUND",
+    type: "DISCOUNT_CREDIT",
     amountCents: discountCents,
     orderId: order.id,
-    note: "Platform discount credited to store on completed order.",
+    note: "Platform discount credited to store on order.",
   });
 
   await tx.order.update({

@@ -1,17 +1,31 @@
 // src/lib/pricing.ts
-
 // src/lib/pricing.ts
+
+export function roundToNearest50Cents(priceCents: number) {
+  if (!Number.isFinite(priceCents)) return 0;
+
+  return Math.max(0, Math.round(priceCents / 50) * 50);
+}
 
 export function applyPriceAdjustment(
   priceCents: number,
   enabled?: boolean | null,
   percent?: number | null,
 ) {
+  
   if (!enabled || !percent) return priceCents;
+  
+  if (!Number.isFinite(priceCents) || priceCents < 0) {
+    return 0;
+  }
+
+  if (!enabled || !Number.isFinite(percent) || percent === 0) {
+    return roundToNearest50Cents(priceCents);
+  }
 
   const adjusted = priceCents * (1 + percent / 100);
 
-  return Math.max(0, Math.round(adjusted));
+  return roundToNearest50Cents(adjusted);
 }
 
 export function formatMoney(cents: number) {
