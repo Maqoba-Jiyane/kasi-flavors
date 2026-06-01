@@ -1,3 +1,5 @@
+//src/lib/pdf/store-menu-poster.ts
+
 import QRCode from "qrcode";
 import chromium from "@sparticuz/chromium";
 import { chromium as playwrightChromium } from "playwright-core";
