@@ -1,7 +1,8 @@
 // src/lib/auth.ts
 import { auth, currentUser } from "@clerk/nextjs/server";
-import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
+import type { UserRole } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 
 /**
  * Return type helper: User including the store relation.
@@ -10,137 +11,207 @@ export type UserWithStore = Prisma.UserGetPayload<{
   include: { store: true };
 }>;
 
+type MinimalUser = {
+  id: string;
+  role: UserRole;
+  name: string;
+  email: string;
+  phone: string | null;
+};
+
+function maskEmail(email: string) {
+  return email.replace(/(.{2}).+(@.*)/, "$1***$2");
+}
+
+function buildDisplayName({
+  fullName,
+  firstName,
+  lastName,
+  username,
+  email,
+}: {
+  fullName: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  username: string | null;
+  email: string;
+}) {
+  return (
+    (fullName ?? [firstName, lastName].filter(Boolean).join(" ").trim()) ||
+    username ||
+    email.split("@")[0] ||
+    "Unknown User"
+  );
+}
+
 /**
  * Get or provision the current DB user based on Clerk auth.
  *
- * Steps:
- * 1) Try to find by clerkUserId (canonical)
- * 2) If not found, fetch Clerk profile and try to find by email
- *    - If found by email, attempt to link Clerk by setting clerkUserId on the existing row.
- *    - If linking fails due to a unique constraint race, return the existing by-email record.
- * 3) If not found by email, create a new DB user.
+ * Flow:
+ * 1) Find by clerkUserId.
+ * 2) If not found, fetch Clerk profile.
+ * 3) Try find by email.
+ * 4) If email exists, link that DB user to the Clerk user.
+ * 5) If no email match exists, create a new DB user.
  */
 export async function getCurrentUser(): Promise<UserWithStore | null> {
   const { userId } = await auth();
-  if (!userId) return null;
 
-  // 1) Try canonical lookup by clerkUserId
-  const byClerk = await prisma.user.findUnique({
-    where: { clerkUserId: userId },
-    include: { store: true },
-  });
-  if (byClerk) return byClerk;
-
-  // 2) Not found by clerkId -> get profile from Clerk
-  const clerkUser = await currentUser();
-  if (!clerkUser || !clerkUser.primaryEmailAddress) {
+  if (!userId) {
     return null;
   }
 
-  const email = clerkUser.primaryEmailAddress.emailAddress;
-  const name =
-    clerkUser.fullName ??
-    ([clerkUser.firstName, clerkUser.lastName]
-      .filter(Boolean)
-      .join(" ")
-      .trim() ||
-      clerkUser.username ||
-      email.split("@")[0] ||
-      "Unknown User");
+  const byClerk = await prisma.user.findUnique({
+    where: {
+      clerkUserId: userId,
+    },
+    include: {
+      store: true,
+    },
+  });
+
+  if (byClerk) {
+    return byClerk;
+  }
+
+  const clerkUser = await currentUser();
+
+  if (!clerkUser?.primaryEmailAddress) {
+    return null;
+  }
+
+  const email = clerkUser.primaryEmailAddress.emailAddress
+    .toLowerCase()
+    .trim();
+
+  const name = buildDisplayName({
+    fullName: clerkUser.fullName,
+    firstName: clerkUser.firstName,
+    lastName: clerkUser.lastName,
+    username: clerkUser.username,
+    email,
+  });
 
   const phone = clerkUser.primaryPhoneNumber?.phoneNumber ?? null;
 
-  // 3) Try find by email
   const byEmail = await prisma.user.findUnique({
-    where: { email },
-    include: { store: true },
+    where: {
+      email,
+    },
+    include: {
+      store: true,
+    },
   });
 
   if (byEmail) {
-    // Attempt to link the Clerk account to this existing DB user by setting clerkUserId.
-    // This is helpful for seeded/demo accounts and prevents duplicate emails.
-    // If the update races and fails (P2002), fall back to returning the existing byEmail user.
     try {
-      const updated = await prisma.user.update({
-        where: { email },
+      return await prisma.user.update({
+        where: {
+          email,
+        },
         data: {
           clerkUserId: userId,
-          // update profile fields but DO NOT modify role
           name,
           phone,
         },
-        include: { store: true },
+        include: {
+          store: true,
+        },
       });
-      return updated;
     } catch (err: unknown) {
       if (
         err instanceof Prisma.PrismaClientKnownRequestError &&
         err.code === "P2002"
       ) {
-        // Race / uniqueness conflict when linking clerkUserId — log and return existing byEmail
-        console.warn(
-          "[auth] race / uniqueness conflict while linking clerkUserId to existing email. Returning byEmail user.",
-          {
-            // Avoid logging full email. Either remove or mask it.
-            emailMasked: email.replace(/(.{2}).+(@.*)/, "$1***$2"),
+        const linkedUser = await prisma.user.findUnique({
+          where: {
             clerkUserId: userId,
-            // Consider dropping meta entirely if it may hold sensitive DB info.
-          }
-        );
+          },
+          include: {
+            store: true,
+          },
+        });
+
+        if (linkedUser) {
+          return linkedUser;
+        }
+
+        console.warn("[auth] Clerk user link race/unique conflict.", {
+          emailMasked: maskEmail(email),
+          clerkUserId: userId,
+        });
 
         return byEmail;
       }
-      // rethrow unexpected errors
+
       throw err;
     }
   }
 
-  // 4) No existing user found -> create a new row
-  const created = await prisma.user.create({
-    data: {
-      clerkUserId: userId,
-      role: "CUSTOMER", // default
-      name,
-      email,
-      phone,
-    },
-    include: { store: true },
-  });
+  try {
+    return await prisma.user.create({
+      data: {
+        clerkUserId: userId,
+        role: "CUSTOMER",
+        name,
+        email,
+        phone,
+      },
+      include: {
+        store: true,
+      },
+    });
+  } catch (err: unknown) {
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === "P2002"
+    ) {
+      const existing = await prisma.user.findFirst({
+        where: {
+          OR: [
+            {
+              clerkUserId: userId,
+            },
+            {
+              email,
+            },
+          ],
+        },
+        include: {
+          store: true,
+        },
+      });
 
-  return created;
+      if (existing) {
+        return existing;
+      }
+    }
+
+    throw err;
+  }
 }
-
-/**
- * Simple assert helper to narrow the user type and require role.
- */
-import type { UserRole } from "@prisma/client";
 
 export function assertRole(
   user: UserWithStore | null,
-  allowed: UserRole[]
+  allowed: UserRole[],
 ): asserts user is UserWithStore {
-
   if (!user || !allowed.includes(user.role)) {
     throw new Error("Not authorized");
   }
 }
 
-type MinimalUser = {
-  id: string;
-  role: UserRole;
-  name: string;
-  email: string
-  phone: string | null;
-};
-
 export async function getCurrentUserMinimal(): Promise<MinimalUser | null> {
-  const { userId } = await auth();
-  if (!userId) return null;
+  const user = await getCurrentUser();
 
-  const user = await prisma.user.findUnique({
-    where: { clerkUserId: userId },
-    select: { id: true, role: true, name: true, email: true, phone: true },
-  });
+  if (!user) {
+    return null;
+  }
 
-  return user;
+  return {
+    id: user.id,
+    role: user.role,
+    name: user.name,
+    email: user.email,
+    phone: user.phone,
+  };
 }
