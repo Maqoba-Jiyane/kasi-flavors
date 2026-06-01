@@ -12,6 +12,7 @@
   "dependencies": {
     "@clerk/nextjs": "^6.35.5",
     "@radix-ui/react-slot": "^1.2.4",
+    "@sparticuz/chromium": "^149.0.0",
     "@upstash/qstash": "^2.8.4",
     "@upstash/qstash-cli": "^2.30.4",
     "@vercel/blob": "^2.4.0",
@@ -26,6 +27,7 @@
     "nodemailer": "^7.0.13",
     "pdf-lib": "^1.17.1",
     "playwright": "^1.60.0",
+    "playwright-core": "^1.60.0",
     "qrcode": "^1.5.4",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
