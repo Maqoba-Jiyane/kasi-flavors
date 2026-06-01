@@ -1,5 +1,6 @@
 import QRCode from "qrcode";
-import { chromium } from "playwright";
+import chromium from "@sparticuz/chromium";
+import { chromium as playwrightChromium } from "playwright-core";
 
 type StoreMenuPosterInput = {
   storeName: string;
@@ -25,6 +26,29 @@ function escapeHtml(value: string) {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
+}
+
+async function launchPdfBrowser() {
+  const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
+
+  if (executablePath) {
+    return playwrightChromium.launch({
+      executablePath,
+      headless: true,
+    });
+  }
+
+  if (process.env.NODE_ENV === "production") {
+    return playwrightChromium.launch({
+      args: chromium.args,
+      executablePath: await chromium.executablePath(),
+      headless: true,
+    });
+  }
+
+  return playwrightChromium.launch({
+    headless: true,
+  });
 }
 
 export async function generateStoreMenuPosterPdf({
@@ -410,16 +434,7 @@ export async function generateStoreMenuPosterPdf({
 </html>
 `;
 
-  const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
-
-  const browser = await chromium.launch({
-    headless: true,
-    ...(executablePath
-      ? {
-          executablePath,
-        }
-      : {}),
-  });
+  const browser = await launchPdfBrowser();
 
   try {
     const page = await browser.newPage({
