@@ -1,3 +1,5 @@
+//src/lib/email/send-store-status-email.ts
+
 import { createMailerTransport, getFromEmail } from "@/lib/email/mailer";
 import { generateStoreMenuPosterPdf } from "@/lib/pdf/store-menu-poster";
 import {

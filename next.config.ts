@@ -9,7 +9,10 @@ const nextConfig: NextConfig = {
         hostname: "*.public.blob.vercel-storage.com",
       },
     ],
-  },
+  },  serverExternalPackages: [
+    "playwright-core",
+    "@sparticuz/chromium",
+  ],
 };
 
 export default nextConfig;

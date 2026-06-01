@@ -1,9 +1,14 @@
+//src/app/api/admin/stores/[storeId]/status
+
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser, assertRole } from "@/lib/auth";
 import { revalidatePath, revalidateTag } from "next/cache";
 import type { StoreApprovalStatus } from "@prisma/client";
 import { sendStoreStatusEmail } from "@/lib/email/send-store-status-email";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 const VALID_STATUSES: StoreApprovalStatus[] = [
   "PENDING_REVIEW",
