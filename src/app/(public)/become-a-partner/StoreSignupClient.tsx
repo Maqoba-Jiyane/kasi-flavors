@@ -23,6 +23,7 @@ type SavedOnboarding = {
   deliveryFeeCents: number | null;
   deliveryRadiusKm: number | null;
   onlinePaymentsEnabled: boolean;
+  cashOnCollectionEnabled: boolean;
   namingTheme:
     | "DESCRIPTIVE"
     | "KASI_STYLE"
@@ -64,7 +65,7 @@ type StoreDraft = {
   supportsDelivery: boolean;
   deliveryFeeCents: number;
   deliveryRadiusKm: number;
-  onlinePaymentsEnabled: boolean;
+  cashOnCollectionEnabled: boolean;
   namingTheme:
     | "DESCRIPTIVE"
     | "KASI_STYLE"
@@ -88,7 +89,7 @@ const emptyStore: StoreDraft = {
   supportsDelivery: false,
   deliveryFeeCents: 0,
   deliveryRadiusKm: 5,
-  onlinePaymentsEnabled: false,
+  cashOnCollectionEnabled: false,
   namingTheme: "DESCRIPTIVE",
 };
 
@@ -154,7 +155,7 @@ function buildStoreFromSaved(saved?: SavedOnboarding | null): StoreDraft {
     supportsDelivery: saved.supportsDelivery ?? false,
     deliveryFeeCents: saved.deliveryFeeCents ?? 0,
     deliveryRadiusKm: saved.deliveryRadiusKm ?? 5,
-    onlinePaymentsEnabled: saved.onlinePaymentsEnabled ?? false,
+    cashOnCollectionEnabled: saved.cashOnCollectionEnabled ?? false,
     namingTheme: saved.namingTheme ?? "DESCRIPTIVE",
   };
 }
@@ -230,6 +231,7 @@ export function StoreSignupClient({
   savedOnboarding?: SavedOnboarding | null;
 }) {
   const [step, setStep] = React.useState(() => getInitialStep(savedOnboarding));
+  const [toast, setToast] = React.useState<string | null>(null);
 
   const [onboardingId, setOnboardingId] = React.useState<string | null>(
     savedOnboarding?.id ?? null,
@@ -249,6 +251,115 @@ export function StoreSignupClient({
   const [submitting, setSubmitting] = React.useState(false);
   const [message, setMessage] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+
+  function showToast(message: string) {
+    setToast(message);
+
+    window.setTimeout(() => {
+      setToast(null);
+    }, 3500);
+  }
+
+  function validateStep(currentStep: number) {
+    if (currentStep === 1) {
+      if (!store.storeName.trim()) {
+        return "Store name is required.";
+      }
+
+      if (!store.phone.trim()) {
+        return "Phone number is required.";
+      }
+
+      if (!store.address.trim()) {
+        return "Address, house number, street, or landmark is required.";
+      }
+
+      // if (!store.area.trim()) {
+      //   return "Area, section, or extension is required.";
+      // }
+
+      if (!store.city.trim()) {
+        return "Town or city is required.";
+      }
+
+      const hasCoords =
+        typeof store.lat === "number" &&
+        typeof store.lng === "number" &&
+        Number.isFinite(store.lat) &&
+        Number.isFinite(store.lng);
+
+      if (!hasCoords) {
+        return "Please select your store location pin on the map.";
+      }
+
+      if (
+        !Number.isFinite(store.avgPrepTimeMinutes) ||
+        store.avgPrepTimeMinutes < 5 ||
+        store.avgPrepTimeMinutes > 180
+      ) {
+        return "Average prep time must be between 5 and 180 minutes.";
+      }
+    }
+
+    if (currentStep === 2) {
+      if (!store.supportsCollection && !store.supportsDelivery) {
+        return "Choose at least one order option: collection or delivery.";
+      }
+
+      if (store.supportsDelivery) {
+        if (
+          !Number.isFinite(store.deliveryFeeCents) ||
+          store.deliveryFeeCents < 0
+        ) {
+          return "Delivery fee must be valid.";
+        }
+
+        if (
+          !Number.isFinite(store.deliveryRadiusKm) ||
+          store.deliveryRadiusKm < 1 ||
+          store.deliveryRadiusKm > 50
+        ) {
+          return "Delivery radius must be between 1km and 50km.";
+        }
+      }
+    }
+
+    // if (currentStep === 3) {
+    //   if (menuFiles.length === 0) {
+    //     return "Please upload at least one clear menu image before continuing.";
+    //   }
+    // }
+
+    if (currentStep === 4) {
+      const validProducts = products.filter(
+        (product) => product.name.trim() && product.priceCents > 0,
+      );
+
+      if (validProducts.length === 0) {
+        return "Add at least one product with a name and price.";
+      }
+
+      const missingCategory = products.find(
+        (product) => product.name.trim() && !product.categoryName.trim(),
+      );
+
+      if (missingCategory) {
+        return "Every product must have a category.";
+      }
+
+      const invalidProduct = products.find(
+        (product) =>
+          product.name.trim() &&
+          (!Number.isFinite(product.priceCents) || product.priceCents <= 0),
+      );
+
+      if (invalidProduct) {
+        return "Every product with a name must have a valid price.";
+      }
+    }
+
+    return null;
+  }
 
   function updateStore<K extends keyof StoreDraft>(
     key: K,
@@ -403,20 +514,145 @@ export function StoreSignupClient({
     }
   }
 
-  function validateBeforeSubmit() {
-    if (!store.storeName.trim()) return "Store name is required.";
-    if (!store.address.trim()) return "Store address is required.";
-    if (!store.city.trim()) return "City is required.";
-    if (!store.supportsCollection && !store.supportsDelivery) {
-      return "Choose at least one order option: collection or delivery.";
+  // function validateStep(currentStep: number) {
+  //   if (currentStep === 1) {
+  //     if (!store.storeName.trim()) {
+  //       return "Store name is required.";
+  //     }
+
+  //     if (!store.phone.trim()) {
+  //       return "Phone number is required.";
+  //     }
+
+  //     if (!store.address.trim()) {
+  //       return "Address, house number, street, or landmark is required.";
+  //     }
+
+  //     if (!store.area.trim()) {
+  //       return "Area, section, or extension is required.";
+  //     }
+
+  //     if (!store.city.trim()) {
+  //       return "Town or city is required.";
+  //     }
+
+  //     const hasCoords =
+  //       typeof store.lat === "number" &&
+  //       typeof store.lng === "number" &&
+  //       Number.isFinite(store.lat) &&
+  //       Number.isFinite(store.lng);
+
+  //     if (!hasCoords) {
+  //       return "Please select your store location pin on the map.";
+  //     }
+
+  //     if (
+  //       !Number.isFinite(store.avgPrepTimeMinutes) ||
+  //       store.avgPrepTimeMinutes < 5 ||
+  //       store.avgPrepTimeMinutes > 180
+  //     ) {
+  //       return "Average prep time must be between 5 and 180 minutes.";
+  //     }
+  //   }
+
+  //   if (currentStep === 2) {
+  //     if (!store.supportsCollection && !store.supportsDelivery) {
+  //       return "Choose at least one order option: collection or delivery.";
+  //     }
+
+  //     if (store.supportsDelivery) {
+  //       if (
+  //         !Number.isFinite(store.deliveryFeeCents) ||
+  //         store.deliveryFeeCents < 0
+  //       ) {
+  //         return "Delivery fee must be valid.";
+  //       }
+
+  //       if (
+  //         !Number.isFinite(store.deliveryRadiusKm) ||
+  //         store.deliveryRadiusKm < 1 ||
+  //         store.deliveryRadiusKm > 50
+  //       ) {
+  //         return "Delivery radius must be between 1km and 50km.";
+  //       }
+  //     }
+  //   }
+
+  //   if (currentStep === 3) {
+  //     if (menuFiles.length === 0) {
+  //       return "Please upload at least one clear menu image before continuing.";
+  //     }
+  //   }
+
+  //   if (currentStep === 4) {
+  //     const validProducts = products.filter(
+  //       (product) => product.name.trim() && product.priceCents > 0,
+  //     );
+
+  //     if (validProducts.length === 0) {
+  //       return "Add at least one product with a name and price.";
+  //     }
+
+  //     const invalidProduct = products.find(
+  //       (product) =>
+  //         product.name.trim() &&
+  //         (!Number.isFinite(product.priceCents) || product.priceCents <= 0),
+  //     );
+
+  //     if (invalidProduct) {
+  //       return "Every product with a name must have a valid price.";
+  //     }
+
+  //     const missingCategory = products.find(
+  //       (product) => product.name.trim() && !product.categoryName.trim(),
+  //     );
+
+  //     if (missingCategory) {
+  //       return "Every product must have a category.";
+  //     }
+  //   }
+
+  //   return null;
+  // }
+
+  function goToNextStep() {
+    setError(null);
+    setMessage(null);
+
+    const validationError = validateStep(step);
+
+    if (validationError) {
+      setError(validationError);
+      showToast(validationError);
+      return;
     }
 
-    const validProducts = products.filter(
-      (product) => product.name.trim() && product.priceCents > 0,
-    );
+    setStep((prev) => Math.min(5, prev + 1));
+  }
 
-    if (validProducts.length === 0) {
-      return "Add at least one product with a name and price.";
+  // function goToNextStep() {
+  //   setError(null);
+  //   setMessage(null);
+
+  //   const validationError = validateStep(step);
+
+  // if (validationError) {
+  //   setError(validationError);
+  //   showToast(validationError);
+  //   return;
+  // }
+
+  //   setStep((prev) => Math.min(5, prev + 1));
+  // }
+
+  function validateBeforeSubmit() {
+    for (let currentStep = 1; currentStep <= 4; currentStep += 1) {
+      const validationError = validateStep(currentStep);
+
+      if (validationError) {
+        setStep(currentStep);
+        return validationError;
+      }
     }
 
     return null;
@@ -430,6 +666,7 @@ export function StoreSignupClient({
 
     if (validationError) {
       setError(validationError);
+      showToast(validationError);
       return;
     }
 
@@ -444,7 +681,7 @@ export function StoreSignupClient({
         isAvailable: product.isAvailable,
         priceAdjustmentEnabled: product.priceAdjustmentEnabled,
         priceAdjustmentPercent: product.priceAdjustmentPercent,
-        categoryName: product.categoryName
+        categoryName: product.categoryName,
       }));
 
     try {
@@ -495,6 +732,11 @@ export function StoreSignupClient({
 
   return (
     <div className="rounded-4xl border border-black/10 bg-white p-4 shadow-sm sm:p-6">
+      {toast && (
+        <div className="fixed right-4 top-4 z-50 max-w-sm rounded-3xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-bold text-red-600 shadow-lg">
+          {toast}
+        </div>
+      )}
       <div className="flex flex-col gap-3 border-b border-black/10 pb-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-xs font-black uppercase tracking-wide text-street-orange">
@@ -616,7 +858,7 @@ export function StoreSignupClient({
           {step < 5 ? (
             <button
               type="button"
-              onClick={() => setStep((prev) => Math.min(5, prev + 1))}
+              onClick={goToNextStep}
               disabled={extracting || submitting}
               className="rounded-full bg-kasi-green px-5 py-3 text-sm font-black text-white transition hover:bg-street-orange disabled:cursor-not-allowed disabled:opacity-60"
             >
@@ -748,51 +990,66 @@ function StoreDetailsStep({
     <div>
       <SectionHeading
         title="Store details"
-        text="Add the information customers will see when they discover your store."
+        text="Tell us where your food business operates and help customers find the correct collection point."
       />
 
-      <div className="mt-5 grid gap-4">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Store name">
-            <input
-              value={store.storeName}
-              onChange={(e) => updateStore("storeName", e.target.value)}
-              className={inputCls}
-              placeholder="e.g. Mdu's Kota Spot"
-            />
-          </Field>
+      <div className="mt-5 grid gap-5">
+        {/* Basic info */}
+        <section className="rounded-3xl border border-black/10 bg-white p-4">
+          <div className="mb-4">
+            <p className="text-sm font-black text-kasi-black">Business info</p>
+            <p className="mt-1 text-xs font-medium leading-5 text-black/55">
+              Add the name, contact number, and short description customers will
+              see on Kasi Flavors.
+            </p>
+          </div>
 
-          <Field label="Phone number">
-            <input
-              value={store.phone}
-              onChange={(e) => updateStore("phone", e.target.value)}
-              className={inputCls}
-              placeholder="073 000 0000"
-              inputMode="tel"
-            />
-          </Field>
-        </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Store name">
+              <input
+                value={store.storeName}
+                onChange={(e) => updateStore("storeName", e.target.value)}
+                className={inputCls}
+                placeholder="e.g. Mdu's Kota Spot"
+              />
+            </Field>
 
-        <Field label="Short description">
-          <textarea
-            value={store.description}
-            onChange={(e) => updateStore("description", e.target.value)}
-            className={inputCls}
-            rows={3}
-            placeholder="Tell customers what your store is known for..."
-          />
-        </Field>
+            <Field label="Phone number">
+              <input
+                value={store.phone}
+                onChange={(e) => updateStore("phone", e.target.value)}
+                className={inputCls}
+                placeholder="e.g. 073 000 0000"
+                inputMode="tel"
+              />
+            </Field>
+          </div>
 
-        <div className="rounded-3xl border border-black/10 bg-kasi-cream p-4">
+          <div className="mt-4">
+            <Field label="Short description">
+              <textarea
+                value={store.description}
+                onChange={(e) => updateStore("description", e.target.value)}
+                className={inputCls}
+                rows={3}
+                placeholder="e.g. Fresh kotas, chips, burgers and lunch plates made for collection."
+              />
+            </Field>
+          </div>
+        </section>
+
+        {/* Map pin */}
+        <section className="rounded-3xl border border-black/10 bg-kasi-cream p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <p className="text-sm font-black text-kasi-black">
-                Store location
+                Store location pin
               </p>
 
               <p className="mt-1 text-xs font-medium leading-5 text-black/55">
-                Use your current location, then adjust the pin to the exact
-                store entrance or collection point.
+                This pin is used for OpenStreetMap location, distance checks,
+                and customer directions. Use your current location, then move
+                the pin to the exact gate, stall, corner, or collection point.
               </p>
             </div>
 
@@ -805,10 +1062,28 @@ function StoreDetailsStep({
             </button>
           </div>
 
-          {hasCoords && (
-            <p className="mt-3 text-xs font-bold text-black/50">
-              Coordinates: {store.lat!.toFixed(6)}, {store.lng!.toFixed(6)}
-            </p>
+          {hasCoords ? (
+            <div className="mt-3 rounded-2xl bg-white px-4 py-3">
+              <p className="text-xs font-black uppercase tracking-wide text-black/45">
+                Selected map coordinates
+              </p>
+
+              <p className="mt-1 text-xs font-bold text-kasi-black">
+                {store.lat!.toFixed(6)}, {store.lng!.toFixed(6)}
+              </p>
+
+              <p className="mt-1 text-xs font-medium leading-5 text-black/50">
+                If the address below looks slightly wrong, keep the pin accurate
+                and edit the address or landmark manually.
+              </p>
+            </div>
+          ) : (
+            <div className="mt-3 rounded-2xl bg-white px-4 py-3">
+              <p className="text-xs font-bold leading-5 text-black/55">
+                No pin selected yet. Choose your current location or place the
+                pin manually on the map.
+              </p>
+            </div>
           )}
 
           <div className="mt-4">
@@ -821,83 +1096,124 @@ function StoreDetailsStep({
               }}
             />
           </div>
-        </div>
+        </section>
 
-        <Field label="Store address">
-          <input
-            value={store.address}
-            onChange={(e) => updateStore("address", e.target.value)}
-            className={inputCls}
-            placeholder="Street address or landmark"
-          />
-        </Field>
+        {/* Address and reverse-geocoded details */}
+        <section className="rounded-3xl border border-black/10 bg-white p-4">
+          <div className="mb-4">
+            <p className="text-sm font-black text-kasi-black">
+              Address details
+            </p>
 
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Field label="Area">
+            <p className="mt-1 text-xs font-medium leading-5 text-black/55">
+              OpenStreetMap may fill in the nearest street, suburb, or area from
+              your pin. Please edit it so customers can understand the location
+              in real township terms.
+            </p>
+          </div>
+
+          <Field label="Address, house number, street, or landmark">
             <input
-              value={store.area}
-              onChange={(e) => updateStore("area", e.target.value)}
+              value={store.address}
+              onChange={(e) => updateStore("address", e.target.value)}
               className={inputCls}
-              placeholder="e.g. Olievenhoutbosch"
+              placeholder="e.g. 1234 Block L, opposite the primary school / next to the taxi rank"
             />
           </Field>
 
-          <Field label="City">
-            <input
-              value={store.city}
-              onChange={(e) => updateStore("city", e.target.value)}
-              className={inputCls}
-              placeholder="e.g. Centurion"
-            />
-          </Field>
+          <div className="mt-4 grid gap-4 sm:grid-cols-3">
+            <Field label="Area / section / extension">
+              <input
+                value={store.area}
+                onChange={(e) => updateStore("area", e.target.value)}
+                className={inputCls}
+                placeholder="e.g. Olievenhoutbosch Ext 36"
+              />
+            </Field>
 
-          <Field label="Postal code">
-            <input
-              value={store.postalCode}
-              onChange={(e) => updateStore("postalCode", e.target.value)}
-              className={inputCls}
-              placeholder="e.g. 0187"
-              inputMode="numeric"
-            />
-          </Field>
-        </div>
+            <Field label="Town / city">
+              <input
+                value={store.city}
+                onChange={(e) => updateStore("city", e.target.value)}
+                className={inputCls}
+                placeholder="e.g. Centurion"
+              />
+            </Field>
 
-        <Field label="Average prep time minutes">
-          <input
-            type="number"
-            min={5}
-            max={180}
-            value={store.avgPrepTimeMinutes}
-            onChange={(e) =>
-              updateStore("avgPrepTimeMinutes", Number(e.target.value))
-            }
-            className={inputCls}
-          />
-        </Field>
+            <Field label="Postal code">
+              <input
+                value={store.postalCode}
+                onChange={(e) => updateStore("postalCode", e.target.value)}
+                className={inputCls}
+                placeholder="e.g. 0187"
+                inputMode="numeric"
+              />
+            </Field>
+          </div>
 
-        <Field label="Product naming theme">
-          <select
-            value={store.namingTheme}
-            onChange={(e) =>
-              updateStore(
-                "namingTheme",
-                e.target.value as StoreDraft["namingTheme"],
-              )
-            }
-            className={inputCls}
-          >
-            <option value="DESCRIPTIVE">Descriptive</option>
-            <option value="KASI_STYLE">Kasi Style</option>
-            <option value="MINIMAL">Minimal</option>
-            <option value="COMBO_STYLE">Combo Style</option>
-            <option value="STORE_BRANDED">Store Branded</option>
-          </select>
-        </Field>
+          <div className="mt-4 rounded-2xl bg-kasi-cream p-4">
+            <p className="text-xs font-black uppercase tracking-wide text-black/45">
+              Helpful township directions
+            </p>
 
-        <p className="text-xs font-medium text-black/55">
-          If your menu items do not have clear names, AI will generate names
-          using this style.
-        </p>
+            <p className="mt-1 text-xs font-medium leading-5 text-black/60">
+              Add details customers will recognise: “blue gate near the soccer
+              ground”, “opposite the school”, “next to the spaza shop”, “corner
+              house by the taxi rank”, or “behind the community hall”.
+            </p>
+          </div>
+        </section>
+
+        {/* Prep and naming */}
+        <section className="rounded-3xl border border-black/10 bg-white p-4">
+          <div className="mb-4">
+            <p className="text-sm font-black text-kasi-black">Order settings</p>
+
+            <p className="mt-1 text-xs font-medium leading-5 text-black/55">
+              Set how long customers should expect to wait and how AI should
+              name unclear menu items.
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Average prep time minutes">
+              <input
+                type="number"
+                min={5}
+                max={180}
+                value={store.avgPrepTimeMinutes}
+                onChange={(e) =>
+                  updateStore("avgPrepTimeMinutes", Number(e.target.value))
+                }
+                className={inputCls}
+              />
+            </Field>
+
+            <Field label="Product naming style">
+              <select
+                value={store.namingTheme}
+                onChange={(e) =>
+                  updateStore(
+                    "namingTheme",
+                    e.target.value as StoreDraft["namingTheme"],
+                  )
+                }
+                className={inputCls}
+              >
+                <option value="DESCRIPTIVE">Clear and descriptive</option>
+                <option value="KASI_STYLE">Kasi-style names</option>
+                <option value="MINIMAL">Short and simple</option>
+                <option value="COMBO_STYLE">Combo-style names</option>
+                <option value="STORE_BRANDED">Store-branded names</option>
+              </select>
+            </Field>
+          </div>
+
+          <p className="mt-3 text-xs font-medium leading-5 text-black/55">
+            If your menu items do not have clear names, AI will generate
+            customer-friendly names using this style.
+          </p>
+        </section>
       </div>
     </div>
   );
@@ -921,7 +1237,7 @@ function OperationsStep({
       />
 
       <div className="mt-5 grid gap-4">
-        <div className="grid gap-4 sm:grid-cols-2">
+        {/* <div className="grid gap-4 sm:grid-cols-2">
           <ToggleCard
             title="Collection"
             text="Customers collect their order from your store."
@@ -934,8 +1250,8 @@ function OperationsStep({
             text="Customers can request delivery if your store supports it."
             checked={store.supportsDelivery}
             onChange={(checked) => updateStore("supportsDelivery", checked)}
-          /> */}
-        </div>
+          />
+        </div> */}
 
         {store.supportsDelivery && (
           <div className="grid gap-4 sm:grid-cols-2">
@@ -971,11 +1287,32 @@ function OperationsStep({
           </div>
         )}
 
+        <div className="rounded-3xl border-2 border-kasi-green bg-kasi-green/10 p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-black text-kasi-black">
+                Online payments
+              </p>
+
+              <p className="mt-1 text-xs font-medium leading-5 text-black/55">
+                Online payments are enabled by default. Customers will be
+                encouraged to pay securely online when placing an order.
+              </p>
+            </div>
+
+            <span className="rounded-full bg-kasi-green px-3 py-1 text-xs font-black uppercase tracking-wide text-white">
+              Enabled
+            </span>
+          </div>
+        </div>
+
         <ToggleCard
-          title="Online payments"
-          text="Allow customers to pay online when placing an order."
-          checked={store.onlinePaymentsEnabled}
-          onChange={(checked) => updateStore("onlinePaymentsEnabled", checked)}
+          title="Cash on collection"
+          text="Allow customers to pay you directly when they collect their order. Platform fees will be tracked in your weekly balance."
+          checked={store.cashOnCollectionEnabled}
+          onChange={(checked) =>
+            updateStore("cashOnCollectionEnabled", checked)
+          }
         />
       </div>
     </div>
@@ -1298,9 +1635,9 @@ function FinalReviewStep({
               </span>
             )}
 
-            {store.onlinePaymentsEnabled && (
+            {store.cashOnCollectionEnabled && (
               <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-black uppercase tracking-wide">
-                Online payments
+                Cash payments
               </span>
             )}
           </div>

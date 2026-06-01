@@ -510,7 +510,8 @@ model StoreOnboarding {
   supportsDelivery      Boolean @default(false)
   deliveryFeeCents      Int?
   deliveryRadiusKm      Float?
-  onlinePaymentsEnabled Boolean @default(false)
+  onlinePaymentsEnabled Boolean @default(true)
+  cashOnCollectionEnabled Boolean @default(false)
 
   namingTheme ProductNamingTheme @default(DESCRIPTIVE)
 

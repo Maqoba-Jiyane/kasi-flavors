@@ -93,6 +93,7 @@ export default async function BecomePartnerPage() {
                   supportsDelivery: savedOnboarding.supportsDelivery,
                   deliveryFeeCents: savedOnboarding.deliveryFeeCents,
                   deliveryRadiusKm: savedOnboarding.deliveryRadiusKm,
+                  cashOnCollectionEnabled: savedOnboarding.cashOnCollectionEnabled,
                   onlinePaymentsEnabled: savedOnboarding.onlinePaymentsEnabled,
                   namingTheme: savedOnboarding.namingTheme,
                   extractedMenuJson: savedOnboarding.extractedMenuJson,
