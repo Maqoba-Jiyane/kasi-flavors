@@ -38,7 +38,7 @@ async function launchPdfBrowser() {
     });
   }
 
-  if (process.env.NODE_ENV === "production") {
+  if (process.env.NODE_ENV !== "development") {
     return playwrightChromium.launch({
       args: chromium.args,
       executablePath: await chromium.executablePath(),
