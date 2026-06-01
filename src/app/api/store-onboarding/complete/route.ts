@@ -160,8 +160,15 @@ export async function POST(req: Request) {
       storeInput?.avgPrepTimeMinutes ?? onboarding?.avgPrepTimeMinutes ?? 25,
     );
 
-    const onlinePaymentsEnabled = Boolean(
-      storeInput?.onlinePaymentsEnabled ?? onboarding?.onlinePaymentsEnabled,
+    // Online-first model: online payments are always enabled.
+    // Do not trust the client to disable this.
+    const onlinePaymentsEnabled = true;
+
+    // Optional owner-controlled cash payments.
+    const cashOnCollectionEnabled = Boolean(
+      storeInput?.cashOnCollectionEnabled ??
+      (onboarding as any)?.cashOnCollectionEnabled ??
+      false,
     );
 
     if (!storeName) {
@@ -264,6 +271,7 @@ export async function POST(req: Request) {
             deliveryRadiusKm: null,
 
             onlinePaymentsEnabled,
+            cashOnCollectionEnabled,
           },
         });
 
@@ -348,6 +356,7 @@ export async function POST(req: Request) {
           deliveryFeeCents: null,
           deliveryRadiusKm: null,
           onlinePaymentsEnabled,
+          cashOnCollectionEnabled,
 
           reviewedProductsJson: validProducts,
           createdStoreId: createdStore.id,
