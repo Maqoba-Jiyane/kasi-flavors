@@ -286,7 +286,7 @@ export function StoreSignupClient({
       // }
 
       if (!store.city.trim()) {
-        return "Town or city is required.";
+        return "Town, city, or municipality is required. If the map did not fill it in, please enter it manually.";
       }
 
       const hasCoords =
