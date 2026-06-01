@@ -91,7 +91,7 @@ model Store {
   postalCode         String?
   phone              String?
   avgPrepTimeMinutes Int     @default(25)
-  creditCents        Int     @default(5000)
+  creditCents        Int     @default(0)
   isOpen             Boolean @default(false)
 
   // NEW: Fulfillment
