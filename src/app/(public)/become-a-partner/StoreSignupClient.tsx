@@ -251,11 +251,18 @@ export function StoreSignupClient({
   const [submitting, setSubmitting] = React.useState(false);
   const [message, setMessage] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const toastTimeoutRef = React.useRef<
+    ReturnType<typeof setTimeout> | number | null
+  >(null);
 
   function showToast(message: string) {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+    }
+
     setToast(message);
 
-    window.setTimeout(() => {
+    toastTimeoutRef.current = window.setTimeout(() => {
       setToast(null);
     }, 3500);
   }
@@ -730,6 +737,14 @@ export function StoreSignupClient({
     }
   }
 
+  React.useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) {
+        clearTimeout(toastTimeoutRef.current);
+      }
+    };
+  }, []);
+
   return (
     <div className="rounded-4xl border border-black/10 bg-white p-4 shadow-sm sm:p-6">
       {toast && (
@@ -927,11 +942,101 @@ function StoreDetailsStep({
     value: StoreDraft[K],
   ) => void;
 }) {
+  const [reverseGeocoding, setReverseGeocoding] = React.useState(false);
+  const [reverseGeocodeMessage, setReverseGeocodeMessage] = React.useState<
+    string | null
+  >(null);
+  const [reverseGeocodeError, setReverseGeocodeError] = React.useState<
+    string | null
+  >(null);
+
   const hasCoords =
     typeof store.lat === "number" &&
     typeof store.lng === "number" &&
     Number.isFinite(store.lat) &&
     Number.isFinite(store.lng);
+
+  const reverseGeocodeTimeoutRef = React.useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
+
+  function scheduleReverseGeocode(lat: number, lng: number) {
+    if (reverseGeocodeTimeoutRef.current) {
+      clearTimeout(reverseGeocodeTimeoutRef.current);
+    }
+
+    reverseGeocodeTimeoutRef.current = setTimeout(() => {
+      reverseGeocodeCoordinates(lat, lng);
+    }, 700);
+  }
+
+  React.useEffect(() => {
+    return () => {
+      if (reverseGeocodeTimeoutRef.current) {
+        clearTimeout(reverseGeocodeTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  async function reverseGeocodeCoordinates(lat: number, lng: number) {
+    setReverseGeocoding(true);
+    setReverseGeocodeMessage(null);
+    setReverseGeocodeError(null);
+
+    try {
+      const res = await fetch("/api/location/reverse-geocode", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+        body: JSON.stringify({ lat, lng }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data?.success) {
+        setReverseGeocodeError(
+          "We could not find an address for this pin. Please enter the address or landmark manually.",
+        );
+        return;
+      }
+
+      const found = data.location;
+
+      console.log("[reverse geocode] found location details:", found);
+
+      const address = String(found.address || found.displayName || "").trim();
+      const area = String(found.area || "").trim();
+      const city = String(found.city || "").trim();
+      const postalCode = String(found.postalCode || "").trim();
+
+      updateStore("address", address);
+      updateStore("area", area);
+      updateStore("city", city);
+      updateStore("postalCode", postalCode);
+
+      if (!city || !area) {
+        setReverseGeocodeMessage(
+          "We found a location from your pin, but some address details are missing. Please add the area, township, town, or nearest landmark manually.",
+        );
+      } else {
+        setReverseGeocodeMessage(
+          "We found address details from your pin. Please check and correct them if needed.",
+        );
+      }
+
+      setReverseGeocodeMessage(
+        "We found address details from your pin. Please check and correct them if needed.",
+      );
+    } catch {
+      setReverseGeocodeError(
+        "Reverse geocoding failed. Your pin is saved, but please enter the address manually.",
+      );
+    } finally {
+      setReverseGeocoding(false);
+    }
+  }
 
   async function useCurrentLocation() {
     if (!navigator.geolocation) {
@@ -947,31 +1052,7 @@ function StoreDetailsStep({
         updateStore("lat", lat);
         updateStore("lng", lng);
 
-        try {
-          const res = await fetch("/api/location/reverse-geocode", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            cache: "no-store",
-            body: JSON.stringify({ lat, lng }),
-          });
-
-          const data = await res.json();
-
-          if (!res.ok || !data?.success) {
-            return;
-          }
-
-          const found = data.location;
-
-          if (found.address) updateStore("address", found.address);
-          if (found.area) updateStore("area", found.area);
-          if (found.city) updateStore("city", found.city);
-          if (found.postalCode) updateStore("postalCode", found.postalCode);
-        } catch {
-          // Coordinates are still useful even if address lookup fails.
-        }
+        await reverseGeocodeCoordinates(lat, lng);
       },
       () => {
         alert(
@@ -1038,6 +1119,24 @@ function StoreDetailsStep({
           </div>
         </section>
 
+        {reverseGeocoding && (
+          <div className="mb-4 rounded-2xl border border-golden-yellow/30 bg-golden-yellow/20 px-4 py-3 text-xs font-bold leading-5 text-kasi-black">
+            Finding address details from your map pin...
+          </div>
+        )}
+
+        {reverseGeocodeMessage && !reverseGeocoding && (
+          <div className="mb-4 rounded-2xl border border-kasi-green/20 bg-kasi-green/10 px-4 py-3 text-xs font-bold leading-5 text-kasi-green">
+            {reverseGeocodeMessage}
+          </div>
+        )}
+
+        {reverseGeocodeError && !reverseGeocoding && (
+          <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-bold leading-5 text-red-600">
+            {reverseGeocodeError}
+          </div>
+        )}
+
         {/* Map pin */}
         <section className="rounded-3xl border border-black/10 bg-kasi-cream p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -1093,6 +1192,7 @@ function StoreDetailsStep({
               onChange={({ lat, lng }) => {
                 updateStore("lat", lat);
                 updateStore("lng", lng);
+                scheduleReverseGeocode(lat, lng);
               }}
             />
           </div>
@@ -1116,6 +1216,7 @@ function StoreDetailsStep({
             <input
               value={store.address}
               onChange={(e) => updateStore("address", e.target.value)}
+              disabled={reverseGeocoding}
               className={inputCls}
               placeholder="e.g. 1234 Block L, opposite the primary school / next to the taxi rank"
             />
@@ -1126,6 +1227,7 @@ function StoreDetailsStep({
               <input
                 value={store.area}
                 onChange={(e) => updateStore("area", e.target.value)}
+                disabled={reverseGeocoding}
                 className={inputCls}
                 placeholder="e.g. Olievenhoutbosch Ext 36"
               />
@@ -1135,6 +1237,7 @@ function StoreDetailsStep({
               <input
                 value={store.city}
                 onChange={(e) => updateStore("city", e.target.value)}
+                disabled={reverseGeocoding}
                 className={inputCls}
                 placeholder="e.g. Centurion"
               />
@@ -1144,6 +1247,7 @@ function StoreDetailsStep({
               <input
                 value={store.postalCode}
                 onChange={(e) => updateStore("postalCode", e.target.value)}
+                disabled={reverseGeocoding}
                 className={inputCls}
                 placeholder="e.g. 0187"
                 inputMode="numeric"
@@ -1740,7 +1844,7 @@ function ToggleCard({
 }
 
 const inputCls =
-  "w-full rounded-2xl border-2 border-black/10 bg-white px-4 py-3 text-sm font-semibold text-kasi-black outline-none transition placeholder:text-black/35 focus:border-kasi-green focus:ring-4 focus:ring-kasi-green/10";
+  "w-full rounded-2xl border-2 border-black/10 bg-white px-4 py-3 text-sm font-semibold text-kasi-black outline-none transition placeholder:text-black/35 focus:border-kasi-green focus:ring-4 focus:ring-kasi-green/10 disabled:cursor-wait disabled:bg-black/5 disabled:opacity-60";
 
 function cryptoRandom() {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
