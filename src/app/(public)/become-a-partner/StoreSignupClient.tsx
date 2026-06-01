@@ -22,6 +22,7 @@ type SavedOnboarding = {
   supportsDelivery: boolean;
   deliveryFeeCents: number | null;
   deliveryRadiusKm: number | null;
+  onlinePaymentsEnabled: boolean;
   cashOnCollectionEnabled: boolean;
   namingTheme:
     | "DESCRIPTIVE"
