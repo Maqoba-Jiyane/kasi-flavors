@@ -82,8 +82,8 @@ export function CheckoutForm({
 
   const canPayCashOnDelivery = fulfilmentType === "DELIVERY";
 
-  const cashPaymentMethod =
-    fulfilmentType === "DELIVERY" ? "CASH_ON_DELIVERY" : "CASH_ON_COLLECTION";
+  // const cashPaymentMethod =
+  //   fulfilmentType === "DELIVERY" ? "CASH_ON_DELIVERY" : "CASH_ON_COLLECTION";
 
   const canUseCurrentPaymentMethod =
     paymentMethod === "ONLINE_PAYMENT"
@@ -234,28 +234,35 @@ export function CheckoutForm({
         : "border-black/10 bg-white hover:border-kasi-green/40"
     }`;
 
-  React.useEffect(() => {
-    if (canUseCurrentPaymentMethod) return;
+function getBestPaymentMethodForFulfilment(
+  nextFulfilmentType: "COLLECTION" | "DELIVERY",
+): CheckoutPaymentMethod {
+  if (onlinePaymentsEnabled) {
+    return "ONLINE_PAYMENT";
+  }
 
-    if (canPayOnline) {
-      setPaymentMethod("ONLINE_PAYMENT");
-      return;
-    }
+  if (
+    nextFulfilmentType === "COLLECTION" &&
+    cashOnCollectionEnabled
+  ) {
+    return "CASH_ON_COLLECTION";
+  }
 
-    if (canPayCashOnCollection) {
-      setPaymentMethod("CASH_ON_COLLECTION");
-      return;
-    }
+  if (nextFulfilmentType === "DELIVERY") {
+    return "CASH_ON_DELIVERY";
+  }
 
-    if (canPayCashOnDelivery) {
-      setPaymentMethod("CASH_ON_DELIVERY");
-    }
-  }, [
-    canUseCurrentPaymentMethod,
-    canPayOnline,
-    canPayCashOnCollection,
-    canPayCashOnDelivery,
-  ]);
+  return "ONLINE_PAYMENT";
+}
+
+function handleFulfilmentChange(nextFulfilmentType: "COLLECTION" | "DELIVERY") {
+  setFulfilmentType(nextFulfilmentType);
+
+  const nextPaymentMethod =
+    getBestPaymentMethodForFulfilment(nextFulfilmentType);
+
+  setPaymentMethod(nextPaymentMethod);
+}
 
   return (
     <form
@@ -358,7 +365,7 @@ export function CheckoutForm({
               name="fulfilmentType"
               value="COLLECTION"
               checked={fulfilmentType === "COLLECTION"}
-              onChange={() => setFulfilmentType("COLLECTION")}
+              onChange={() => handleFulfilmentChange("COLLECTION")}
               disabled={processing}
               className="h-4 w-4 accent-kasi-green"
             />
@@ -381,7 +388,7 @@ export function CheckoutForm({
                 name="fulfilmentType"
                 value="DELIVERY"
                 checked={fulfilmentType === "DELIVERY"}
-                onChange={() => setFulfilmentType("DELIVERY")}
+                onChange={() => handleFulfilmentChange("DELIVERY")}
                 disabled={processing}
                 className="h-4 w-4 accent-kasi-green"
               />
