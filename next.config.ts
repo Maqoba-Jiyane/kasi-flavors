@@ -9,10 +9,23 @@ const nextConfig: NextConfig = {
         hostname: "*.public.blob.vercel-storage.com",
       },
     ],
-  },  serverExternalPackages: [
-    "playwright-core",
-    "@sparticuz/chromium",
-  ],
+  },
+
+  serverExternalPackages: ["playwright-core", "@sparticuz/chromium"],
+
+  outputFileTracingIncludes: {
+    "/api/admin/stores/[storeId]/status": [
+      "./node_modules/playwright-core/browsers.json",
+      "./node_modules/playwright-core/lib/**",
+      "./node_modules/@sparticuz/chromium/**",
+    ],
+
+    "/api/debug/pdf": [
+      "./node_modules/playwright-core/browsers.json",
+      "./node_modules/playwright-core/lib/**",
+      "./node_modules/@sparticuz/chromium/**",
+    ],
+  },
 };
 
 export default nextConfig;
