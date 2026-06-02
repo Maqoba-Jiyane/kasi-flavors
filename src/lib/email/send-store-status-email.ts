@@ -291,59 +291,159 @@ export async function sendStoreStatusEmail({
   status,
   reason,
 }: SendStoreStatusEmailInput) {
-  const appUrl = getAppUrl();
-  const menuUrl = `${appUrl}/stores/${storeSlug}`;
-  const ownerDashboardUrl = `${appUrl}/owner/store/overview`;
+  const requestId = crypto.randomUUID();
+  const startedAt = Date.now();
 
-  const subject =
-    status === "APPROVED"
-      ? `${storeName} is now live on Kasi Flavors`
-      : status === "REJECTED"
-        ? `${storeName} needs changes before going live`
-        : status === "DEACTIVATED"
-          ? `${storeName} has been deactivated`
-          : `${storeName} is back in review`;
-
-  const html = buildHtmlEmail({
-    ownerName,
+  console.log(`[store-email:${requestId}] Started`, {
+    to,
     storeName,
+    storeSlug,
     status,
-    menuUrl,
-    ownerDashboardUrl,
-    reason,
+    willGeneratePdf: status === "APPROVED",
   });
 
-  const text = buildTextEmail({
-    ownerName,
-    storeName,
-    status,
-    menuUrl,
-    ownerDashboardUrl,
-    reason,
-  });
+  try {
+    const appUrl = getAppUrl();
+    const menuUrl = `${appUrl}/stores/${storeSlug}`;
+    const ownerDashboardUrl = `${appUrl}/owner/store/overview`;
 
-  const attachments =
-    status === "APPROVED"
-      ? [
+    console.log(`[store-email:${requestId}] URLs built`, {
+      appUrl,
+      menuUrl,
+      ownerDashboardUrl,
+    });
+
+    const subject =
+      status === "APPROVED"
+        ? `${storeName} is now live on Kasi Flavors`
+        : status === "REJECTED"
+          ? `${storeName} needs changes before going live`
+          : status === "DEACTIVATED"
+            ? `${storeName} has been deactivated`
+            : `${storeName} is back in review`;
+
+    console.log(`[store-email:${requestId}] Subject built`, {
+      subject,
+    });
+
+    console.log(`[store-email:${requestId}] Building HTML email`);
+
+    const html = buildHtmlEmail({
+      ownerName,
+      storeName,
+      status,
+      menuUrl,
+      ownerDashboardUrl,
+      reason,
+    });
+
+    console.log(`[store-email:${requestId}] HTML email built`, {
+      htmlLength: html.length,
+    });
+
+    console.log(`[store-email:${requestId}] Building text email`);
+
+    const text = buildTextEmail({
+      ownerName,
+      storeName,
+      status,
+      menuUrl,
+      ownerDashboardUrl,
+      reason,
+    });
+
+    console.log(`[store-email:${requestId}] Text email built`, {
+      textLength: text.length,
+    });
+
+    let attachments: {
+      filename: string;
+      content: Buffer;
+      contentType: string;
+    }[] = [];
+
+    if (status === "APPROVED") {
+      console.log(`[store-email:${requestId}] Starting PDF generation`);
+
+      const pdfStartedAt = Date.now();
+
+      try {
+        const pdfAttachment = await generateStoreMenuPosterPdf({
+          storeName,
+          storeSlug,
+          menuUrl,
+        });
+
+        attachments = [
           {
-            ...(await generateStoreMenuPosterPdf({
-              storeName,
-              storeSlug,
-              menuUrl,
-            })),
+            ...pdfAttachment,
             contentType: "application/pdf",
           },
-        ]
-      : [];
+        ];
 
-  const transport = createMailerTransport();
+        console.log(`[store-email:${requestId}] PDF generated successfully`, {
+          filename: pdfAttachment.filename,
+          sizeBytes: pdfAttachment.content.length,
+          durationMs: Date.now() - pdfStartedAt,
+        });
+      } catch (pdfError) {
+        console.error(`[store-email:${requestId}] PDF generation failed`, {
+          errorName: pdfError instanceof Error ? pdfError.name : "UnknownError",
+          errorMessage:
+            pdfError instanceof Error ? pdfError.message : String(pdfError),
+          errorStack: pdfError instanceof Error ? pdfError.stack : undefined,
+          durationMs: Date.now() - pdfStartedAt,
+        });
 
-  return transport.sendMail({
-    from: getFromEmail(),
-    to,
-    subject,
-    html,
-    text,
-    attachments,
-  });
+        // Do not throw unless you want email sending to fail when PDF fails.
+        // This allows the approval email to still send without attachment.
+        attachments = [];
+      }
+    } else {
+      console.log(`[store-email:${requestId}] Skipping PDF generation`, {
+        status,
+      });
+    }
+
+    console.log(`[store-email:${requestId}] Creating mail transport`);
+
+    const transport = createMailerTransport();
+
+    console.log(`[store-email:${requestId}] Sending email`, {
+      to,
+      subject,
+      attachmentCount: attachments.length,
+      attachmentNames: attachments.map((attachment) => attachment.filename),
+    });
+
+    const sendStartedAt = Date.now();
+
+    const result = await transport.sendMail({
+      from: getFromEmail(),
+      to,
+      subject,
+      html,
+      text,
+      attachments,
+    });
+
+    console.log(`[store-email:${requestId}] Email sent successfully`, {
+      durationMs: Date.now() - sendStartedAt,
+      totalDurationMs: Date.now() - startedAt,
+      messageId: result.messageId,
+      accepted: result.accepted,
+      rejected: result.rejected,
+    });
+
+    return result;
+  } catch (error) {
+    console.error(`[store-email:${requestId}] Failed`, {
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorStack: error instanceof Error ? error.stack : undefined,
+      totalDurationMs: Date.now() - startedAt,
+    });
+
+    throw error;
+  }
 }
