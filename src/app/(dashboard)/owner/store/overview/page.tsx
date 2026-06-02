@@ -198,15 +198,27 @@ export default async function StoreOverviewPage({
   );
   const last7DaysStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-  const ordersLast7 = await prisma.order.findMany({
-    where: {
-      storeId: store.id,
-      createdAt: { gte: last7DaysStart },
-    },
-    include: { items: true },
-    orderBy: { createdAt: "desc" },
-    take: 500,
-  });
+const ordersLast7 = await prisma.order.findMany({
+  where: {
+    storeId: store.id,
+    createdAt: { gte: last7DaysStart },
+
+    OR: [
+      {
+        paymentMethod: {
+          in: ["CASH_ON_COLLECTION", "CASH_ON_DELIVERY"],
+        },
+      },
+      {
+        paymentMethod: "ONLINE_PAYMENT",
+        status: "ACCEPTED",
+      },
+    ],
+  },
+  include: { items: true },
+  orderBy: { createdAt: "desc" },
+  take: 500,
+});
 
   const activeOrders = ordersLast7.filter((order) =>
     ACTIVE_STATUSES.includes(order.status),
