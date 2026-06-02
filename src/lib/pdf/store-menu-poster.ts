@@ -31,28 +31,97 @@ function escapeHtml(value: string) {
 }
 
 async function launchPdfBrowser() {
-  const { chromium: playwrightChromium } = await import("playwright-core");
+  const requestId = crypto.randomUUID();
+  const startedAt = Date.now();
 
-  const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
-
-  if (executablePath) {
-    return playwrightChromium.launch({
-      executablePath,
-      headless: true,
-    });
-  }
-
-  if (process.env.VERCEL || process.env.NODE_ENV === "production") {
-    return playwrightChromium.launch({
-      args: chromium.args,
-      executablePath: await chromium.executablePath(),
-      headless: true,
-    });
-  }
-
-  return playwrightChromium.launch({
-    headless: true,
+  console.log(`[pdf-browser:${requestId}] Starting browser launch`, {
+    nodeEnv: process.env.NODE_ENV,
+    isVercel: Boolean(process.env.VERCEL),
+    hasCustomExecutablePath: Boolean(
+      process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
+    ),
   });
+
+  try {
+    console.log(`[pdf-browser:${requestId}] Importing playwright-core`);
+
+    const { chromium: playwrightChromium } = await import("playwright-core");
+
+    console.log(`[pdf-browser:${requestId}] playwright-core imported`);
+
+    const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
+
+    if (executablePath) {
+      console.log(`[pdf-browser:${requestId}] Using custom executable path`, {
+        executablePath,
+      });
+
+      const browser = await playwrightChromium.launch({
+        executablePath,
+        headless: true,
+      });
+
+      console.log(`[pdf-browser:${requestId}] Browser launched with custom path`, {
+        durationMs: Date.now() - startedAt,
+      });
+
+      return browser;
+    }
+
+    if (process.env.VERCEL || process.env.NODE_ENV === "production") {
+      console.log(`[pdf-browser:${requestId}] Getting Sparticuz executable path`);
+
+      const sparticuzStartedAt = Date.now();
+      const sparticuzExecutablePath = await chromium.executablePath();
+
+      console.log(`[pdf-browser:${requestId}] Sparticuz executable path resolved`, {
+        executablePath: sparticuzExecutablePath,
+        durationMs: Date.now() - sparticuzStartedAt,
+        argsCount: chromium.args.length,
+      });
+
+      console.log(`[pdf-browser:${requestId}] Launching browser on Vercel/production`);
+
+      const launchStartedAt = Date.now();
+
+      const browser = await playwrightChromium.launch({
+        args: chromium.args,
+        executablePath: sparticuzExecutablePath,
+        headless: true,
+      });
+
+      console.log(`[pdf-browser:${requestId}] Browser launched successfully`, {
+        durationMs: Date.now() - launchStartedAt,
+        totalDurationMs: Date.now() - startedAt,
+      });
+
+      return browser;
+    }
+
+    console.log(`[pdf-browser:${requestId}] Launching local browser`);
+
+    const launchStartedAt = Date.now();
+
+    const browser = await playwrightChromium.launch({
+      headless: true,
+    });
+
+    console.log(`[pdf-browser:${requestId}] Local browser launched successfully`, {
+      durationMs: Date.now() - launchStartedAt,
+      totalDurationMs: Date.now() - startedAt,
+    });
+
+    return browser;
+  } catch (error) {
+    console.error(`[pdf-browser:${requestId}] Browser launch failed`, {
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorStack: error instanceof Error ? error.stack : undefined,
+      totalDurationMs: Date.now() - startedAt,
+    });
+
+    throw error;
+  }
 }
 
 export async function generateStoreMenuPosterPdf({
