@@ -2,8 +2,7 @@
 
 import QRCode from "qrcode";
 import chromium from "@sparticuz/chromium";
-import { chromium as playwrightChromium } from "playwright-core";
-import path from "node:path";
+// import path from "node:path";
 
 type StoreMenuPosterInput = {
   storeName: string;
@@ -32,25 +31,21 @@ function escapeHtml(value: string) {
 }
 
 async function launchPdfBrowser() {
-  const isProduction = process.env.NODE_ENV === "production";
-  const executablePathFromEnv = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
+  const { chromium: playwrightChromium } = await import("playwright-core");
 
-  if (executablePathFromEnv) {
+  const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
+
+  if (executablePath) {
     return playwrightChromium.launch({
-      executablePath: executablePathFromEnv,
+      executablePath,
       headless: true,
     });
   }
 
-  if (isProduction || process.env.VERCEL) {
-    chromium.setGraphicsMode = false;
-
-    const executablePath = await chromium.executablePath();
-    process.env.LD_LIBRARY_PATH = path.dirname(executablePath);
-
+  if (process.env.VERCEL || process.env.NODE_ENV === "production") {
     return playwrightChromium.launch({
       args: chromium.args,
-      executablePath,
+      executablePath: await chromium.executablePath(),
       headless: true,
     });
   }
