@@ -385,7 +385,7 @@ const ordersLast7 = await prisma.order.findMany({
             action={updateStoreSettings}
             className="mt-5 grid gap-4 sm:grid-cols-2"
           >
-            <div className="rounded-3xl border border-black/10 bg-kasi-cream p-4">
+            {/* <div className="rounded-3xl border border-black/10 bg-kasi-cream p-4">
               <p className="text-xs font-black uppercase tracking-wide text-black/45">
                 Availability
               </p>
@@ -418,7 +418,7 @@ const ordersLast7 = await prisma.order.findMany({
                   by Monday, you’ll need to settle the amount with Kasi Flavors.
                 </p>
               )}
-            </div>
+            </div> */}
 
             <div className="rounded-3xl border border-black/10 bg-kasi-cream p-4">
               <p className="text-xs font-black uppercase tracking-wide text-black/45">

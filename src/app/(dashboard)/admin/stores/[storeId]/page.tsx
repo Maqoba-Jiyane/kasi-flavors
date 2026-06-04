@@ -7,6 +7,7 @@ import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import AdminStoreStatusActions from "@/components/admin/AdminStoreStatusActions";
 import type { Metadata } from "next";
+import AssignStoreOwnerPanel from "@/components/admin/AssignStoreOwnerPanel";
 
 export const metadata: Metadata = {
   title: "Store review",
@@ -166,7 +167,10 @@ export default async function AdminStoreDetailPage({
         <OverviewCard label="Products" value={store._count.products} />
         <OverviewCard label="Orders" value={store._count.orders} />
         <OverviewCard label="Recent completed" value={completedOrders} />
-        <OverviewCard label="Recent revenue" value={formatMoney(totalRevenueCents)} />
+        <OverviewCard
+          label="Recent revenue"
+          value={formatMoney(totalRevenueCents)}
+        />
       </section>
 
       <section className="grid gap-5 lg:grid-cols-[1fr_0.85fr]">
@@ -183,8 +187,14 @@ export default async function AdminStoreDetailPage({
             <DetailRow label="Store name" value={store.name} />
             <DetailRow label="Slug" value={store.slug} />
             <DetailRow label="Phone" value={store.phone || "Not provided"} />
-            <DetailRow label="Prep time" value={`${store.avgPrepTimeMinutes} min`} />
-            <DetailRow label="Collection radius" value={`${store.collectionRadiusKm} km`} />
+            <DetailRow
+              label="Prep time"
+              value={`${store.avgPrepTimeMinutes} min`}
+            />
+            <DetailRow
+              label="Collection radius"
+              value={`${store.collectionRadiusKm} km`}
+            />
             <DetailRow
               label="Coordinates"
               value={
@@ -212,7 +222,10 @@ export default async function AdminStoreDetailPage({
           <div className="mt-5 grid gap-3 text-sm">
             <DetailRow label="Name" value={store.owner.name} />
             <DetailRow label="Email" value={store.owner.email} />
-            <DetailRow label="Phone" value={store.owner.phone || "Not provided"} />
+            <DetailRow
+              label="Phone"
+              value={store.owner.phone || "Not provided"}
+            />
             <DetailRow label="Role" value={store.owner.role} />
 
             {store.approvedAt && (
@@ -232,6 +245,34 @@ export default async function AdminStoreDetailPage({
             )}
           </div>
         </div>
+
+        {store.owner.role === "ADMIN" ? (
+          <div className="mt-5 rounded-3xl border border-kasi-green/20 bg-kasi-green/10 p-4">
+            <p className="text-xs font-black uppercase tracking-wide text-kasi-green">
+              Admin-created store
+            </p>
+
+            <p className="mt-1 text-sm font-medium leading-6 text-black/65">
+              This store is currently owned by an admin account. You can assign
+              it to the real store owner when their account is ready.
+            </p>
+
+            <div className="mt-4">
+              <AssignStoreOwnerPanel storeId={store.id} />
+            </div>
+          </div>
+        ) : (
+          <div className="mt-5 rounded-3xl border border-black/10 bg-kasi-cream p-4">
+            <p className="text-xs font-black uppercase tracking-wide text-black/45">
+              Reassignment locked
+            </p>
+
+            <p className="mt-1 text-sm font-medium leading-6 text-black/60">
+              This store is already owned by a seller account, so it cannot be
+              reassigned from this admin screen.
+            </p>
+          </div>
+        )}
       </section>
 
       <section className="rounded-4xl border border-black/10 bg-white p-5 shadow-sm">

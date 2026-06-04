@@ -330,12 +330,14 @@ export async function POST(req: Request) {
           }),
         });
 
-        await tx.user.update({
-          where: { id: user.id },
-          data: {
-            role: "STORE_OWNER",
-          },
-        });
+        if (user.role === "CUSTOMER") {
+          await tx.user.update({
+            where: { id: user.id },
+            data: {
+              role: "STORE_OWNER",
+            },
+          });
+        }
 
         const onboardingData = {
           status: "COMPLETED",

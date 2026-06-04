@@ -4,6 +4,8 @@ import type { Metadata } from "next";
 import { StoreMenuClient } from "./StoreMenuClient";
 import { applyPriceAdjustment } from "@/lib/pricing";
 import { getStoreMenuCached } from "@/lib/stores/getStoreMenu";
+import { getCurrentUserMinimalReadOnly } from "@/lib/auth";
+import { getCartForUser } from "@/lib/cart";
 
 type StorePageRouteParams = {
   slug: string;
@@ -159,6 +161,15 @@ export default async function StorePage({ params }: StorePageProps) {
     isAvailable: product.isAvailable,
   }));
 
+  const user = await getCurrentUserMinimalReadOnly();
+  const cart = user ? await getCartForUser(user.id) : null;
+
+  const initialCart =
+    cart?.items?.map((item) => ({
+      productId: item.productId,
+      quantity: item.quantity,
+    })) ?? [];
+
   return (
     <main className="min-h-screen bg-kasi-cream pb-28">
       <StoreHeader
@@ -191,7 +202,12 @@ export default async function StorePage({ params }: StorePageProps) {
           </div>
         </div>
 
-        <StoreMenuClient storeSlug={store.slug} products={mappedProducts} />
+        <StoreMenuClient
+          storeSlug={store.slug}
+          products={mappedProducts}
+          initialCart={initialCart}
+          storeIsOpen={store.isOpen}
+        />
       </section>
     </main>
   );
