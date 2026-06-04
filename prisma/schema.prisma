@@ -102,6 +102,10 @@ model Store {
   owner   User   @relation("StoreOwner", fields: [ownerId], references: [id])
   ownerId String @unique @db.ObjectId
 
+  createdByAdminId    String?   @db.ObjectId
+  reassignedByAdminId String?   @db.ObjectId
+  reassignedAt        DateTime?
+
   approvalStatus  StoreApprovalStatus @default(PENDING_REVIEW)
   approvedAt      DateTime?
   approvedById    String?             @db.ObjectId
@@ -505,12 +509,12 @@ model StoreOnboarding {
   lng         Float?
   phone       String?
 
-  avgPrepTimeMinutes    Int     @default(25)
-  supportsCollection    Boolean @default(true)
-  supportsDelivery      Boolean @default(false)
-  deliveryFeeCents      Int?
-  deliveryRadiusKm      Float?
-  onlinePaymentsEnabled Boolean @default(true)
+  avgPrepTimeMinutes      Int     @default(25)
+  supportsCollection      Boolean @default(true)
+  supportsDelivery        Boolean @default(false)
+  deliveryFeeCents        Int?
+  deliveryRadiusKm        Float?
+  onlinePaymentsEnabled   Boolean @default(true)
   cashOnCollectionEnabled Boolean @default(false)
 
   namingTheme ProductNamingTheme @default(DESCRIPTIVE)

@@ -215,3 +215,24 @@ export async function getCurrentUserMinimal(): Promise<MinimalUser | null> {
     phone: user.phone,
   };
 }
+
+export async function getCurrentUserMinimalReadOnly() {
+  const { userId } = await auth();
+
+  if (!userId) {
+    return null;
+  }
+
+  return prisma.user.findUnique({
+    where: {
+      clerkUserId: userId,
+    },
+    select: {
+      id: true,
+      role: true,
+      name: true,
+      email: true,
+      phone: true,
+    },
+  });
+}

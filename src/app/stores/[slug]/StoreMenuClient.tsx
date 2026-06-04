@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { MenuItemCard, MenuItem } from "@/components/MenuItemCard";
 import { CartSummaryBar } from "@/components/CartSummaryBar";
@@ -14,6 +14,8 @@ type CartItem = {
 interface StoreMenuClientProps {
   storeSlug: string;
   products: MenuItem[];
+  initialCart?: CartItem[];
+  storeIsOpen: boolean;
 }
 
 type MenuCategoryGroup = {
@@ -44,8 +46,13 @@ function normalizeCategory(item: MenuItem) {
   };
 }
 
-export function StoreMenuClient({ storeSlug, products }: StoreMenuClientProps) {
-  const [cart, setCart] = useState<CartItem[]>([]);
+export function StoreMenuClient({
+  storeSlug,
+  products,
+  initialCart = [],
+  storeIsOpen
+}: StoreMenuClientProps) {
+  const [cart, setCart] = useState<CartItem[]>(initialCart);
   const router = useRouter();
 
   async function loadCartFromServer() {
@@ -73,11 +80,6 @@ export function StoreMenuClient({ storeSlug, products }: StoreMenuClientProps) {
       // Keep UI usable even when cart sync fails.
     }
   }
-
-  useEffect(() => {
-    loadCartFromServer();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const categoryGroups = useMemo<MenuCategoryGroup[]>(() => {
     const map = new Map<string, MenuCategoryGroup>();
@@ -166,7 +168,7 @@ const activeCategory = useMemo(() => {
   return (
     <>
       {products.length === 0 ? (
-        <div className="rounded-[2rem] border border-black/10 bg-white p-8 text-center shadow-sm">
+        <div className="rounded-4xl border border-black/10 bg-white p-8 text-center shadow-sm">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-kasi-black text-3xl">
             🍟
           </div>
@@ -245,6 +247,7 @@ const activeCategory = useMemo(() => {
                     key={item.id}
                     item={item}
                     onAdd={handleAddToCart}
+                    storeIsOpen={storeIsOpen}
                   />
                 ))}
               </div>

@@ -21,6 +21,7 @@ export type MenuItem = {
 
 interface MenuItemCardProps {
   item: MenuItem;
+  storeIsOpen: boolean;
   onAdd: (itemId: string, quantity: number) => void;
 }
 
@@ -28,7 +29,7 @@ function formatPrice(priceCents: number) {
   return `R ${(priceCents / 100).toFixed(2)}`;
 }
 
-export function MenuItemCard({ item, onAdd }: MenuItemCardProps) {
+export function MenuItemCard({ item, storeIsOpen, onAdd }: MenuItemCardProps) {
   const [quantity, setQuantity] = useState<number>(1);
   const [isAdding, setIsAdding] = useState(false);
   const [justAdded, setJustAdded] = useState(false);
@@ -44,6 +45,11 @@ export function MenuItemCard({ item, onAdd }: MenuItemCardProps) {
   }, []);
 
   const handleAdd = async () => {
+    if (!storeIsOpen) {
+      toast.error("This store is currently closed.");
+      return;
+    }
+
     if (!item.isAvailable || isAdding) return;
 
     setIsAdding(true);
@@ -72,8 +78,8 @@ export function MenuItemCard({ item, onAdd }: MenuItemCardProps) {
     }
   };
 
-  const canChangeQty = item.isAvailable && !isAdding;
-  const canClickAdd = item.isAvailable && !isAdding;
+  const canChangeQty = storeIsOpen && item.isAvailable && !isAdding;
+  const canClickAdd = storeIsOpen && item.isAvailable && !isAdding;
 
   return (
     <div
@@ -195,14 +201,20 @@ export function MenuItemCard({ item, onAdd }: MenuItemCardProps) {
                 </span>
               )}
 
-              <span>
-                {!item.isAvailable
-                  ? "Sold out"
-                  : isAdding
-                    ? "Adding…"
-                    : justAdded
-                      ? "Added"
-                      : "Add to cart"}
+              <span
+                className={`mt-1 inline-flex items-center text-white rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${
+                  !storeIsOpen
+                    ? "bg-black/10 text-black/50"
+                    : item.isAvailable
+                      ? "bg-kasi-green/10 text-kasi-green"
+                      : "bg-black/10 text-black/50"
+                }`}
+              >
+                {!storeIsOpen
+                  ? "Store closed"
+                  : item.isAvailable
+                    ? "Available"
+                    : "Sold out"}
               </span>
             </button>
           </div>

@@ -8,11 +8,16 @@ import { getCurrentUser } from "@/lib/auth";
 const MAX_ITEMS_PER_CART = 5;
 
 type AddToCartResult =
-  | { success: true }
+  | {
+      success: true;
+    }
   | {
       success: false;
       errorCode:
         | "UNAUTHENTICATED"
+        | "PRODUCT_NOT_FOUND"
+        | "STORE_NOT_APPROVED"
+        | "STORE_CLOSED"
         | "NOT_AVAILABLE"
         | "MAX_ITEMS_EXCEEDED"
         | "INVALID_PRODUCT";
@@ -73,16 +78,35 @@ export async function addToCart(
     },
   });
 
-  if (
-    !product ||
-    !product.isAvailable ||
-    !product.store ||
-    product.store.approvalStatus !== "APPROVED"
-  ) {
+  if (!product) {
     return {
-      success: false,
-      errorCode: "NOT_AVAILABLE",
-      message: "This item is no longer available.",
+      success: false as const,
+      errorCode: "PRODUCT_NOT_FOUND" as const,
+      message: "Product not found.",
+    };
+  }
+
+  if (product.store.approvalStatus !== "APPROVED") {
+    return {
+      success: false as const,
+      errorCode: "STORE_NOT_APPROVED" as const,
+      message: "This store is not accepting orders right now.",
+    };
+  }
+
+  if (!product.store.isOpen) {
+    return {
+      success: false as const,
+      errorCode: "STORE_CLOSED" as const,
+      message: "This store is currently closed.",
+    };
+  }
+
+  if (!product.isAvailable) {
+    return {
+      success: false as const,
+      errorCode: "NOT_AVAILABLE" as const,
+      message: "This item is currently unavailable.",
     };
   }
 
