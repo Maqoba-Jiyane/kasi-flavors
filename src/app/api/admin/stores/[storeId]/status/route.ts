@@ -173,6 +173,7 @@ export async function POST(
 
     const revalidationStartedAt = Date.now();
 
+    revalidateTag("stores:available-count", "max");
     revalidateTag("stores", "max");
     revalidateTag("stores:open-collection", "max");
     revalidateTag("stores:all-collection", "max");
