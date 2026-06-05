@@ -6,6 +6,7 @@ import { applyPriceAdjustment } from "@/lib/pricing";
 import { getStoreMenuCached } from "@/lib/stores/getStoreMenu";
 import { getCurrentUserMinimalReadOnly } from "@/lib/auth";
 import { getCartForUser } from "@/lib/cart";
+import { getStoreFeatures } from "@/lib/stores/features";
 
 type StorePageRouteParams = {
   slug: string;
@@ -25,6 +26,9 @@ export async function generateMetadata({
       area: true,
       city: true,
       description: true,
+      ogImageUrl: true,
+      premiumEnabled: true,
+      premiumUntil: true,
     },
   });
 
@@ -49,12 +53,21 @@ export async function generateMetadata({
   const locationLabel = [area, city].filter(Boolean).join(", ");
   const baseTitle = locationLabel ? `${name} in ${locationLabel}` : name;
 
+  const premiumEnabled = getStoreFeatures(store).premiumActive;
+
+  const cleanDescription = store.description?.trim();
+
   const metaDescription =
-    description && description.trim().length > 40
-      ? description.slice(0, 155)
-      : `Order from ${name} in ${
+    premiumEnabled && cleanDescription
+      ? cleanDescription.slice(0, 155)
+      : `Order from ${store.name} in ${
           locationLabel || "your area"
-        } on Kasi Flavors. Browse the full menu and place your kasi food order online for collection or delivery.`;
+        } on Kasi Flavors. Browse the menu and place your order online for collection.`;
+
+  const ogImageUrl =
+    premiumEnabled && store.ogImageUrl
+      ? store.ogImageUrl
+      : "/brand/kasi-flavors-og.png";
 
   const urlPath = `/stores/${slug}`;
 
@@ -69,11 +82,20 @@ export async function generateMetadata({
       title: `${baseTitle} | Kasi Flavors`,
       description: metaDescription,
       url: urlPath,
+      images: [
+        {
+          url: ogImageUrl,
+          width: 1200,
+          height: 630,
+          alt: `${store.name} on Kasi Flavors`,
+        },
+      ],
     },
     twitter: {
       card: "summary_large_image",
       title: `${baseTitle} | Kasi Flavors`,
       description: metaDescription,
+      images: [ogImageUrl],
     },
     robots: {
       index: true,
@@ -143,21 +165,23 @@ export default async function StorePage({ params }: StorePageProps) {
 
   const storeAny = store as any;
 
+  const premiumEnabled = getStoreFeatures(store).premiumActive;
+
   const mappedProducts = products.map((product) => ({
     id: product.id,
     name: product.name,
     description: product.description ?? undefined,
-
     categoryId: product.categoryId ?? undefined,
     categoryName: product.category?.name ?? "Menu",
     categorySortOrder: product.category?.sortOrder ?? 999,
-
     priceCents: applyPriceAdjustment(
       product.priceCents,
       product.priceAdjustmentEnabled,
       product.priceAdjustmentPercent,
     ),
-    imageUrl: product.imageUrl ?? undefined,
+
+    imageUrl: premiumEnabled ? (product.imageUrl ?? undefined) : undefined,
+
     isAvailable: product.isAvailable,
   }));
 
@@ -180,6 +204,7 @@ export default async function StorePage({ params }: StorePageProps) {
         avgPrepTimeMinutes={store.avgPrepTimeMinutes}
         priceAdjustmentEnabled={storeAny.priceAdjustmentEnabled}
         priceAdjustmentPercent={storeAny.priceAdjustmentPercent}
+        ogImageUrl={premiumEnabled ? store.ogImageUrl : null}
       />
 
       <section className="mx-auto max-w-5xl px-4 py-6 sm:px-6">

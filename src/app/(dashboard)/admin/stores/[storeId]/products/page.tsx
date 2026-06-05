@@ -3,6 +3,7 @@ import { getCurrentUser, assertRole } from "@/lib/auth";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { AdminProductPriceManager } from "@/components/admin/AdminProductPriceManager";
+import { AdminProductImageManager } from "@/components/admin/AdminProductImageManager";
 
 export default async function AdminStoreProductsPage({
   params,
@@ -21,9 +22,16 @@ export default async function AdminStoreProductsPage({
       name: true,
       slug: true,
       products: {
-        orderBy: {
-          createdAt: "desc",
-        },
+        orderBy: [
+          {
+            category: {
+              sortOrder: "asc",
+            },
+          },
+          {
+            name: "asc",
+          },
+        ],
         select: {
           id: true,
           name: true,
@@ -31,6 +39,15 @@ export default async function AdminStoreProductsPage({
           isAvailable: true,
           priceAdjustmentEnabled: true,
           priceAdjustmentPercent: true,
+          imageUrl: true,
+          category: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              sortOrder: true,
+            },
+          },
         },
       },
     },
@@ -49,7 +66,7 @@ export default async function AdminStoreProductsPage({
         </Link>
 
         <p className="mt-5 text-xs font-black uppercase tracking-wide text-street-orange">
-          Product pricing
+          Product management
         </p>
 
         <h1 className="mt-2 text-3xl font-black tracking-tight text-kasi-black">
@@ -57,10 +74,25 @@ export default async function AdminStoreProductsPage({
         </h1>
 
         <p className="mt-2 text-sm font-medium leading-6 text-black/60">
-          Manage discounts and pricing adjustments for this store’s menu.
+          Manage product pictures, discounts, and pricing adjustments for this
+          store’s menu.
         </p>
       </header>
 
+      <AdminProductImageManager
+        storeId={store.id}
+        products={store.products.map((product) => ({
+          id: product.id,
+          name: product.name,
+          imageUrl: product.imageUrl,
+          isAvailable: product.isAvailable,
+          categoryId: product.category?.id ?? null,
+          categoryName: product.category?.name ?? "Menu",
+          categorySlug: product.category?.slug ?? "menu",
+          categorySortOrder: product.category?.sortOrder ?? 999,
+        }))}
+      />
+      
       <AdminProductPriceManager storeId={store.id} products={store.products} />
     </main>
   );
