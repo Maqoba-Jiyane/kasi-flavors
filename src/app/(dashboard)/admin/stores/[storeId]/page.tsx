@@ -8,6 +8,7 @@ import { formatDistanceToNow } from "date-fns";
 import AdminStoreStatusActions from "@/components/admin/AdminStoreStatusActions";
 import type { Metadata } from "next";
 import AssignStoreOwnerPanel from "@/components/admin/AssignStoreOwnerPanel";
+import AdminStorePremiumFeaturesPanel from "@/components/admin/AdminStorePremiumFeaturesPanel";
 
 export const metadata: Metadata = {
   title: "Store review",
@@ -246,34 +247,45 @@ export default async function AdminStoreDetailPage({
           </div>
         </div>
 
-        {store.owner.role === "ADMIN" ? (
-          <div className="mt-5 rounded-3xl border border-kasi-green/20 bg-kasi-green/10 p-4">
-            <p className="text-xs font-black uppercase tracking-wide text-kasi-green">
-              Admin-created store
-            </p>
+        {
+          store.owner.role === "ADMIN" && (
+            <div className="mt-5 rounded-3xl border border-kasi-green/20 bg-kasi-green/10 p-4">
+              <p className="text-xs font-black uppercase tracking-wide text-kasi-green">
+                Admin-created store
+              </p>
 
-            <p className="mt-1 text-sm font-medium leading-6 text-black/65">
-              This store is currently owned by an admin account. You can assign
-              it to the real store owner when their account is ready.
-            </p>
+              <p className="mt-1 text-sm font-medium leading-6 text-black/65">
+                This store is currently owned by an admin account. You can
+                assign it to the real store owner when their account is ready.
+              </p>
 
-            <div className="mt-4">
-              <AssignStoreOwnerPanel storeId={store.id} />
+              <div className="mt-4">
+                <AssignStoreOwnerPanel storeId={store.id} />
+              </div>
             </div>
-          </div>
-        ) : (
-          <div className="mt-5 rounded-3xl border border-black/10 bg-kasi-cream p-4">
-            <p className="text-xs font-black uppercase tracking-wide text-black/45">
-              Reassignment locked
-            </p>
+          )
+          // : (
+          //   <div className="mt-5 rounded-3xl border border-black/10 bg-kasi-cream p-4">
+          //     <p className="text-xs font-black uppercase tracking-wide text-black/45">
+          //       Reassignment locked
+          //     </p>
 
-            <p className="mt-1 text-sm font-medium leading-6 text-black/60">
-              This store is already owned by a seller account, so it cannot be
-              reassigned from this admin screen.
-            </p>
-          </div>
-        )}
+          //     <p className="mt-1 text-sm font-medium leading-6 text-black/60">
+          //       This store is already owned by a seller account, so it cannot be
+          //       reassigned from this admin screen.
+          //     </p>
+          //   </div>
+          // )
+        }
       </section>
+
+      <AdminStorePremiumFeaturesPanel
+        storeId={store.id}
+        initialDescription={store.description}
+        initialOgImageUrl={store.ogImageUrl}
+        initialPremiumEnabled={store.premiumEnabled}
+        initialPremiumUntil={store.premiumUntil?.toISOString() ?? null}
+      />
 
       <section className="rounded-4xl border border-black/10 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">

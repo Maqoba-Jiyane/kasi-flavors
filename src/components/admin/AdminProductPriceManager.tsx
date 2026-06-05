@@ -28,7 +28,7 @@ export function AdminProductPriceManager({ storeId, products }: Props) {
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [enabled, setEnabled] = useState(true);
-  const [percent, setPercent] = useState(-10);
+  const [percent, setPercent] = useState(10);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{
     type: "success" | "error";
